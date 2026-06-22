@@ -65,6 +65,12 @@ enum Commands {
         /// Skip texture pixelation (keep the full-res texture).
         #[arg(long)]
         no_pixelate: bool,
+        /// Keep disconnected fragments (skip largest-component cleanup).
+        #[arg(long)]
+        keep_floaters: bool,
+        /// Skip normalization (centering + unit scaling).
+        #[arg(long)]
+        no_normalize: bool,
     },
 }
 
@@ -94,6 +100,8 @@ fn main() -> Result<()> {
             texture_size,
             palette_colors,
             no_pixelate,
+            keep_floaters,
+            no_normalize,
         } => {
             let opts = LofiOpts {
                 target_tris,
@@ -101,6 +109,8 @@ fn main() -> Result<()> {
                 texture_size,
                 palette_colors,
                 no_pixelate,
+                keep_floaters,
+                no_normalize,
             };
             lofi(&mesh, &out, &opts)
         }
@@ -113,10 +123,13 @@ struct LofiOpts {
     texture_size: u32,
     palette_colors: u16,
     no_pixelate: bool,
+    keep_floaters: bool,
+    no_normalize: bool,
 }
 
-/// [Phase 2] Convert a reconstructed textured mesh to a lo-fi glTF asset:
-/// import → decimate → pixelate texture → glTF export (unlit + nearest).
+/// [Phase 2] Convert a reconstructed textured mesh to a lo-fi glTF asset: import
+/// → heal (largest component) → decimate → normalize → pixelate → glTF export
+/// (unlit + nearest).
 fn lofi(mesh_path: &Path, out: &Path, opts: &LofiOpts) -> Result<()> {
     use modelgen_core::{export, mesh, texture};
 
@@ -127,6 +140,11 @@ fn lofi(mesh_path: &Path, out: &Path, opts: &LofiOpts) -> Result<()> {
         m.vertex_count()
     );
 
+    if !opts.keep_floaters {
+        m = mesh::keep_largest_component(&m);
+        println!("largest component: {} triangles", m.triangle_count());
+    }
+
     if !opts.no_decimate {
         m = mesh::decimate(&m, opts.target_tris);
         println!(
@@ -134,6 +152,11 @@ fn lofi(mesh_path: &Path, out: &Path, opts: &LofiOpts) -> Result<()> {
             m.triangle_count(),
             m.vertex_count()
         );
+    }
+
+    if !opts.no_normalize {
+        mesh::normalize(&mut m);
+        println!("normalized: centered + unit-scaled");
     }
 
     if !opts.no_pixelate
