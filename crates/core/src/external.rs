@@ -7,6 +7,7 @@
 //! tools' (notably OpenMVS's AGPL).
 
 use crate::error::{Error, Result};
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 /// Single-binary tools that must be present for reconstruction (the core pipeline).
@@ -33,37 +34,63 @@ pub struct ToolStatus {
     pub found: bool,
     /// Whether its absence is a hard failure (vs. optional, e.g. in-container Blender).
     pub required: bool,
-    /// Reported version, once `doctor` runs real smoke checks (TODO Phase 0).
+    /// The tool's reported `--version` first line, if it resolves and runs.
     pub version: Option<String>,
 }
 
-/// Check that every required tool resolves on `PATH`.
+/// Check each external tool: whether it resolves on `PATH` and, if so, its
+/// reported `--version`.
 ///
-/// This is the cheap presence check. The full `doctor` additionally runs real
-/// smoke inferences (a 1-image `rembg`, a tiny COLMAP/OpenMVS run on a fixture,
-/// a cube bake), since "binary resolves" does not prove "binary works" — e.g.
-/// onnxruntime can import yet crash with an illegal instruction on some arm64
-/// setups. TODO(phase 0): add the smoke runs.
+/// The version probe doubles as a basic smoke test — "binary resolves" does not
+/// prove "binary works" (e.g. onnxruntime can import yet crash with an illegal
+/// instruction on some arm64 setups), and a binary that crashes on launch
+/// yields no version. A fuller fixture-based smoke (a 1-image `rembg`, a tiny
+/// COLMAP/OpenMVS run, a cube bake) remains future work.
 pub fn check_tools() -> Vec<ToolStatus> {
     let mut statuses: Vec<ToolStatus> = REQUIRED_TOOLS
         .iter()
         .chain(OPENMVS_TOOLS.iter())
         .copied()
-        .map(|name| ToolStatus {
-            name: name.to_string(),
-            found: is_on_path(name),
-            required: true,
-            version: None,
-        })
+        .map(|name| status_for(name, true))
         .collect();
     // Blender is optional in-container: absent on arm64, where the bake is host-native.
-    statuses.push(ToolStatus {
-        name: BAKE_TOOL.to_string(),
-        found: is_on_path(BAKE_TOOL),
-        required: false,
-        version: None,
-    });
+    statuses.push(status_for(BAKE_TOOL, false));
     statuses
+}
+
+fn status_for(name: &str, required: bool) -> ToolStatus {
+    // Blender may live off `PATH` (the macOS app bundle); resolve it the same way
+    // the rebake step does, so doctor reflects what will actually be used.
+    let resolved: Option<PathBuf> = if name == BAKE_TOOL {
+        crate::rebake::find_blender()
+    } else {
+        is_on_path(name).then(|| PathBuf::from(name))
+    };
+    ToolStatus {
+        name: name.to_string(),
+        found: resolved.is_some(),
+        required,
+        version: resolved.as_deref().and_then(probe_version),
+    }
+}
+
+/// Best-effort: run `<tool> --version` and return its first output line. Returns
+/// `None` if the tool lacks a `--version` flag or crashes on launch.
+fn probe_version(tool: &Path) -> Option<String> {
+    let out = Command::new(tool).arg("--version").output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let text = if out.stdout.is_empty() {
+        out.stderr
+    } else {
+        out.stdout
+    };
+    String::from_utf8_lossy(&text)
+        .lines()
+        .next()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
 }
 
 /// Returns true if `tool` is resolvable on `PATH`.

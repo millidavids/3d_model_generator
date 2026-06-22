@@ -18,7 +18,12 @@ pub fn doctor() -> Result<()> {
         } else {
             ""
         };
-        println!("  {mark} {}{note}", status.name);
+        let ver = status
+            .version
+            .as_deref()
+            .map(|v| format!("  [{v}]"))
+            .unwrap_or_default();
+        println!("  {mark} {}{ver}{note}", status.name);
         if status.required && !status.found {
             missing_required += 1;
         }
