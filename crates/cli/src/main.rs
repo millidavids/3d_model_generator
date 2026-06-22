@@ -50,6 +50,21 @@ enum Commands {
         mesh: PathBuf,
         /// Output `.glb` path.
         out: PathBuf,
+        /// Target triangle budget for decimation.
+        #[arg(long, default_value_t = 1500)]
+        target_tris: usize,
+        /// Skip decimation (keep full resolution).
+        #[arg(long)]
+        no_decimate: bool,
+        /// Pixelated texture size (longest edge, px).
+        #[arg(long, default_value_t = 128)]
+        texture_size: u32,
+        /// Palette colour count for the texture.
+        #[arg(long, default_value_t = 256)]
+        palette_colors: u16,
+        /// Skip texture pixelation (keep the full-res texture).
+        #[arg(long)]
+        no_pixelate: bool,
     },
 }
 
@@ -71,21 +86,69 @@ fn main() -> Result<()> {
             mask,
             max_edge,
         } => reconstruct(&images, &work, no_downscale, mask, max_edge),
-        Commands::Lofi { mesh, out } => lofi(&mesh, &out),
+        Commands::Lofi {
+            mesh,
+            out,
+            target_tris,
+            no_decimate,
+            texture_size,
+            palette_colors,
+            no_pixelate,
+        } => {
+            let opts = LofiOpts {
+                target_tris,
+                no_decimate,
+                texture_size,
+                palette_colors,
+                no_pixelate,
+            };
+            lofi(&mesh, &out, &opts)
+        }
     }
 }
 
-/// [Phase 2 — WIP] Convert a reconstructed textured mesh to a lo-fi glTF asset.
-/// Currently a passthrough (import → glTF export); decimation and texture
-/// pixelation slot in between next.
-fn lofi(mesh_path: &Path, out: &Path) -> Result<()> {
-    let mesh = modelgen_core::mesh::load_textured_ply(mesh_path)?;
+struct LofiOpts {
+    target_tris: usize,
+    no_decimate: bool,
+    texture_size: u32,
+    palette_colors: u16,
+    no_pixelate: bool,
+}
+
+/// [Phase 2] Convert a reconstructed textured mesh to a lo-fi glTF asset:
+/// import → decimate → pixelate texture → glTF export (unlit + nearest).
+fn lofi(mesh_path: &Path, out: &Path, opts: &LofiOpts) -> Result<()> {
+    use modelgen_core::{export, mesh, texture};
+
+    let mut m = mesh::load_textured_ply(mesh_path)?;
     println!(
-        "loaded mesh: {} triangles, {} vertices",
-        mesh.triangle_count(),
-        mesh.vertex_count(),
+        "loaded: {} triangles, {} vertices",
+        m.triangle_count(),
+        m.vertex_count()
     );
-    modelgen_core::export::write_glb(&mesh, out)?;
+
+    if !opts.no_decimate {
+        m = mesh::decimate(&m, opts.target_tris);
+        println!(
+            "decimated: {} triangles, {} vertices",
+            m.triangle_count(),
+            m.vertex_count()
+        );
+    }
+
+    if !opts.no_pixelate
+        && let Some(src) = m.texture.clone()
+    {
+        let pix = out.with_extension("tex.png");
+        texture::pixelate(&src, &pix, opts.texture_size, opts.palette_colors)?;
+        m.texture = Some(pix);
+        println!(
+            "pixelated texture: {}px, {} colors",
+            opts.texture_size, opts.palette_colors
+        );
+    }
+
+    export::write_glb(&m, out)?;
     println!("wrote {}", out.display());
     Ok(())
 }

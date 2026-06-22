@@ -18,6 +18,7 @@ pub mod mesh;
 pub mod pipeline;
 pub mod preprocess;
 pub mod reconstruct;
+pub mod texture;
 
 pub use config::PipelineConfig;
 pub use error::{Error, Result};

@@ -6,8 +6,10 @@
 //! is "exploded" — three fresh vertices per triangle — which the later
 //! decimation step re-indexes and shrinks.
 
+mod decimate;
 mod import;
 
+pub use decimate::decimate;
 pub use import::load_textured_ply;
 
 use std::path::PathBuf;
