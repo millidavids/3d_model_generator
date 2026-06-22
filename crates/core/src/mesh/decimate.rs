@@ -42,3 +42,43 @@ pub fn decimate(mesh: &Mesh, target_triangles: usize) -> Mesh {
         texture: mesh.texture.clone(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::decimate;
+    use crate::mesh::Mesh;
+
+    #[test]
+    fn respects_the_triangle_budget() {
+        // A 16x16 grid of quads = 512 triangles (exploded).
+        let n = 16;
+        let (mut positions, mut uvs) = (Vec::new(), Vec::new());
+        for y in 0..n {
+            for x in 0..n {
+                let (x0, y0, x1, y1) = (x as f32, y as f32, (x + 1) as f32, (y + 1) as f32);
+                for p in [
+                    [x0, y0, 0.0],
+                    [x1, y0, 0.0],
+                    [x1, y1, 0.0],
+                    [x0, y0, 0.0],
+                    [x1, y1, 0.0],
+                    [x0, y1, 0.0],
+                ] {
+                    positions.push(p);
+                    uvs.push([0.0, 0.0]);
+                }
+            }
+        }
+        let m = Mesh {
+            indices: (0..positions.len() as u32).collect(),
+            positions,
+            uvs,
+            texture: None,
+        };
+        assert_eq!(m.triangle_count(), 512);
+
+        let out = decimate(&m, 50);
+        assert!(out.triangle_count() <= 50, "{} > 50", out.triangle_count());
+        assert!(out.triangle_count() > 0);
+    }
+}

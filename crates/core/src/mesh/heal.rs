@@ -59,3 +59,30 @@ fn union(parent: &mut [u32], a: u32, b: u32) {
         parent[ra as usize] = rb;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::keep_largest_component;
+    use crate::mesh::Mesh;
+
+    #[test]
+    fn drops_the_smaller_disconnected_fragment() {
+        // Component A: a quad (2 triangles sharing positions a,c). Component B:
+        // a separate triangle far away. UV=0 everywhere so welding is by position.
+        let (a, b, c, d) = (
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [1.0, 1.0, 0.0],
+            [0.0, 1.0, 0.0],
+        );
+        let (e, f, g) = ([9.0, 0.0, 0.0], [10.0, 0.0, 0.0], [9.0, 1.0, 0.0]);
+        let m = Mesh {
+            positions: vec![a, b, c, a, c, d, e, f, g],
+            uvs: vec![[0.0, 0.0]; 9],
+            indices: (0..9).collect(),
+            texture: None,
+        };
+        // The quad (2 triangles) is the largest component; the floater is dropped.
+        assert_eq!(keep_largest_component(&m).triangle_count(), 2);
+    }
+}

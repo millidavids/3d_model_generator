@@ -35,3 +35,29 @@ pub fn normalize(mesh: &mut Mesh) {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::normalize;
+    use crate::mesh::Mesh;
+
+    #[test]
+    fn centers_on_origin_and_scales_longest_edge_to_one() {
+        // bbox (1,2,3)..(3,6,7): extent (2,4,4), longest 4 (the Y axis).
+        let mut m = Mesh {
+            positions: vec![[1.0, 2.0, 3.0], [3.0, 6.0, 7.0]],
+            uvs: vec![[0.0, 0.0]; 2],
+            indices: vec![],
+            texture: None,
+        };
+        normalize(&mut m);
+        let (p0, p1) = (m.positions[0], m.positions[1]);
+        // centered: each axis midpoint ~ 0.
+        for i in 0..3 {
+            assert!(((p0[i] + p1[i]) / 2.0).abs() < 1e-6);
+        }
+        // longest edge (Y) is exactly 1, and no axis exceeds 1.
+        assert!((p1[1] - p0[1] - 1.0).abs() < 1e-6);
+        assert!((p1[0] - p0[0]) <= 1.0 + 1e-6);
+    }
+}
