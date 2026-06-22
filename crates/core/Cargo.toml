@@ -13,3 +13,4 @@ name = "modelgen_core"
 thiserror.workspace = true
 tracing.workspace = true
 serde.workspace = true
+image = "0.25"

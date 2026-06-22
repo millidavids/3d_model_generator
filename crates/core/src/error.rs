@@ -22,6 +22,10 @@ pub enum Error {
     #[error("stage `{stage}` gate check failed: {reason}")]
     GateFailed { stage: String, reason: String },
 
+    /// A path could not be represented as UTF-8 for passing to an external tool.
+    #[error("path is not valid UTF-8: {0}")]
+    InvalidPath(std::path::PathBuf),
+
     /// An underlying I/O error.
     #[error(transparent)]
     Io(#[from] std::io::Error),

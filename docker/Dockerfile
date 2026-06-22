@@ -43,8 +43,13 @@ RUN git clone --depth 1 https://github.com/cdcseacave/VCG.git vcglib && \
 # Configure (split from the compile so missing-dep failures surface in seconds).
 # CPU-only; SSE off = arm64-safe. Viewer/Python/BreakPad/SiftGPU/Tests off (we
 # only need the reconstruction apps); IPO/LTO off to avoid slow, OOM-prone links.
+# _FORTIFY_SOURCE=0: Ubuntu 24.04 defaults glibc hardening to level 3, which
+# false-positives ("*** buffer overflow detected ***") in OpenMVS's release
+# depth-map code — a known v2.3.0 issue on 24.04 (x86_64 AND arm64; not a debug
+# build, not macOS). cdcseacave/openMVS#1107/#1136/#1176.
 RUN cmake -S openMVS -B /build/openMVS -G Ninja \
         -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_CXX_FLAGS="-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=0" \
         -DVCG_ROOT=/src/vcglib \
         -DOpenMVS_USE_CUDA=OFF \
         -DOpenMVS_USE_SSE=OFF \

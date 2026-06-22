@@ -3,7 +3,7 @@
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use modelgen_core::{Pipeline, PipelineConfig, external};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
 #[command(
@@ -27,6 +27,19 @@ enum Commands {
         /// Output `.glb` path.
         output: PathBuf,
     },
+    /// Reconstruct a textured mesh from photos (COLMAP + OpenMVS). [Phase 1]
+    Reconstruct {
+        /// Directory of input photographs.
+        images: PathBuf,
+        /// Working directory for intermediate + output artifacts.
+        work: PathBuf,
+        /// Use the input images as-is (skip downscaling).
+        #[arg(long)]
+        no_downscale: bool,
+        /// Longest-edge (px) to downscale inputs to before reconstruction.
+        #[arg(long, default_value_t = 1600)]
+        max_edge: u32,
+    },
 }
 
 fn main() -> Result<()> {
@@ -40,7 +53,29 @@ fn main() -> Result<()> {
             println!("wrote {}", out.display());
             Ok(())
         }
+        Commands::Reconstruct {
+            images,
+            work,
+            no_downscale,
+            max_edge,
+        } => reconstruct(&images, &work, no_downscale, max_edge),
     }
+}
+
+/// [Phase 1] Reconstruct a textured mesh from photos: preprocess (downscale),
+/// then COLMAP SfM + OpenMVS dense/mesh/texture.
+fn reconstruct(images: &Path, work: &Path, no_downscale: bool, max_edge: u32) -> Result<()> {
+    let input = if no_downscale {
+        images.to_path_buf()
+    } else {
+        let prepped = work.join("images");
+        let n = modelgen_core::preprocess::downscale_images(images, &prepped, max_edge)?;
+        println!("preprocessed {n} image(s) → {}", prepped.display());
+        prepped
+    };
+    let result = modelgen_core::reconstruct::run(&input, work)?;
+    println!("textured mesh: {}", result.textured_mesh.display());
+    Ok(())
 }
 
 fn init_tracing() {

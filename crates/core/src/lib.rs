@@ -14,6 +14,8 @@ pub mod config;
 pub mod error;
 pub mod external;
 pub mod pipeline;
+pub mod preprocess;
+pub mod reconstruct;
 
 pub use config::PipelineConfig;
 pub use error::{Error, Result};

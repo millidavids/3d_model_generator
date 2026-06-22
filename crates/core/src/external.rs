@@ -82,10 +82,26 @@ fn is_on_path(tool: &str) -> bool {
 /// Run an external tool to completion, erroring if it is missing or exits
 /// non-zero.
 pub fn run(tool: &str, args: &[&str]) -> Result<()> {
+    run_impl(None, tool, args)
+}
+
+/// Like [`run`], but executes the tool with `dir` as its working directory.
+/// OpenMVS tools resolve their `-w` working folder and relative outputs there.
+pub fn run_in(dir: &std::path::Path, tool: &str, args: &[&str]) -> Result<()> {
+    run_impl(Some(dir), tool, args)
+}
+
+fn run_impl(dir: Option<&std::path::Path>, tool: &str, args: &[&str]) -> Result<()> {
     if !is_on_path(tool) {
         return Err(Error::ToolNotFound(tool.to_string()));
     }
-    let status = Command::new(tool).args(args).status()?;
+    let mut cmd = Command::new(tool);
+    cmd.args(args);
+    if let Some(d) = dir {
+        cmd.current_dir(d);
+    }
+    tracing::info!(tool, ?args, "running external tool");
+    let status = cmd.status()?;
     if !status.success() {
         return Err(Error::ToolFailed {
             tool: tool.to_string(),
@@ -93,4 +109,11 @@ pub fn run(tool: &str, args: &[&str]) -> Result<()> {
         });
     }
     Ok(())
+}
+
+/// Convert a path to `&str` for passing to a tool, erroring (not panicking) on
+/// non-UTF-8 paths.
+pub fn path_str(p: &std::path::Path) -> Result<&str> {
+    p.to_str()
+        .ok_or_else(|| Error::InvalidPath(p.to_path_buf()))
 }

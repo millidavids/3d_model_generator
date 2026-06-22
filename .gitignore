@@ -7,3 +7,6 @@
 # OS / editor cruft
 .DS_Store
 *.rs.bk
+
+# OpenMVS writes <Tool>-<timestamp>.log files in its working directory
+*.log
