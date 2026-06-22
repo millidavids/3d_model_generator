@@ -16,10 +16,15 @@
 # INSTALL_BLENDER=1.
 #
 # Build natively per arch: arm64 on the Mac now; amd64 on the Windows box later.
-# TODO(pin): base image digest, apt versions, OpenMVS/VCG SHAs, conda-lock.
+#
+# Pinned for reproducibility: the base image by manifest-list digest (below),
+# OpenMVS by release tag + VCG by commit SHA (further down). Still floating:
+# apt package versions, conda packages, and the rembg pip install — TODO: a
+# conda-lock + a constraints file would close those.
 ###############################################################################
 
-ARG MINIFORGE=condaforge/miniforge3:24.11.3-2
+# Digest is the multi-arch manifest list; BuildKit selects the per-platform image.
+ARG MINIFORGE=condaforge/miniforge3:24.11.3-2@sha256:1148ac0d3edaa4f25ca77d35e440766883a1be275fd5552f106c4756ac53f532
 
 # --- builder: compile OpenMVS (apt deps) -------------------------------------
 FROM ${MINIFORGE} AS builder
@@ -36,8 +41,13 @@ WORKDIR /src
 # PoseLib/Ceres), and v2.4.0's JPEG-XL code path (cv::IMWRITE_JPEGXL_QUALITY needs
 # OpenCV >= 4.8; Ubuntu 24.04 ships 4.6). We use COLMAP for SfM, so OpenMVS's own
 # SfM is never needed.
-# TODO(pin): pin VCG to a matching commit/SHA; prune now-unused apt libs (jxl/exiv2).
-RUN git clone --depth 1 https://github.com/cdcseacave/VCG.git vcglib && \
+# VCG has no releases, so pin it by commit SHA — a floating HEAD is a silent
+# reproducibility hole that could break the OpenMVS build without warning.
+# TODO(slim): prune the now-unused apt libs (jxl/exiv2) from the runtime stage.
+RUN mkdir vcglib && cd vcglib && git init -q && \
+    git fetch --depth 1 https://github.com/cdcseacave/VCG.git \
+        658ba36d0a5666650da6e066b4794efc5a463407 && \
+    git checkout -q FETCH_HEAD && cd .. && \
     git clone --depth 1 --branch v2.3.0 https://github.com/cdcseacave/openMVS.git openMVS
 
 # Configure (split from the compile so missing-dep failures surface in seconds).
