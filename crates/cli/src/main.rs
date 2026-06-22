@@ -36,6 +36,10 @@ enum Commands {
         /// Use the input images as-is (skip downscaling).
         #[arg(long)]
         no_downscale: bool,
+        /// Remove the background (rembg) before reconstruction, for clean
+        /// object-only meshes.
+        #[arg(long)]
+        mask: bool,
         /// Longest-edge (px) to downscale inputs to before reconstruction.
         #[arg(long, default_value_t = 1600)]
         max_edge: u32,
@@ -57,22 +61,43 @@ fn main() -> Result<()> {
             images,
             work,
             no_downscale,
+            mask,
             max_edge,
-        } => reconstruct(&images, &work, no_downscale, max_edge),
+        } => reconstruct(&images, &work, no_downscale, mask, max_edge),
     }
 }
 
-/// [Phase 1] Reconstruct a textured mesh from photos: preprocess (downscale),
-/// then COLMAP SfM + OpenMVS dense/mesh/texture.
-fn reconstruct(images: &Path, work: &Path, no_downscale: bool, max_edge: u32) -> Result<()> {
-    let input = if no_downscale {
+/// [Phase 1] Reconstruct a textured mesh from photos: preprocess (downscale,
+/// optional background masking), then COLMAP SfM + OpenMVS dense/mesh/texture.
+fn reconstruct(
+    images: &Path,
+    work: &Path,
+    no_downscale: bool,
+    mask: bool,
+    max_edge: u32,
+) -> Result<()> {
+    use modelgen_core::preprocess;
+
+    // Downscale (unless skipped) to keep CPU reconstruction tractable.
+    let downscaled = if no_downscale {
         images.to_path_buf()
     } else {
-        let prepped = work.join("images");
-        let n = modelgen_core::preprocess::downscale_images(images, &prepped, max_edge)?;
-        println!("preprocessed {n} image(s) → {}", prepped.display());
-        prepped
+        let out = work.join("images");
+        let n = preprocess::downscale_images(images, &out, max_edge)?;
+        println!("downscaled {n} image(s)");
+        out
     };
+
+    // Optionally remove the background so the reconstructed mesh is object-only.
+    let input = if mask {
+        let out = work.join("masked");
+        let n = preprocess::mask_images(&downscaled, &out, &work.join("masks"))?;
+        println!("masked {n} image(s) (background removed)");
+        out
+    } else {
+        downscaled
+    };
+
     let result = modelgen_core::reconstruct::run(&input, work)?;
     println!("textured mesh: {}", result.textured_mesh.display());
     Ok(())
