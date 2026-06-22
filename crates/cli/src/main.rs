@@ -2,7 +2,7 @@
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
-use modelgen_core::{Pipeline, PipelineConfig, external};
+use modelgen_core::external;
 use std::path::{Path, PathBuf};
 
 #[derive(Parser)]
@@ -20,12 +20,30 @@ struct Cli {
 enum Commands {
     /// Check that all external tools are available and working.
     Doctor,
-    /// Process one object: a directory of photos → a glTF asset.
+    /// End-to-end: photos → lo-fi glTF asset (reconstruct + lofi in one step).
     Process {
-        /// Directory containing the input photographs.
-        input: PathBuf,
+        /// Directory of input photographs.
+        photos: PathBuf,
         /// Output `.glb` path.
-        output: PathBuf,
+        out: PathBuf,
+        /// Working directory (default: "<out-stem>.work" beside the output).
+        #[arg(long)]
+        work: Option<PathBuf>,
+        /// Remove the background (rembg) before reconstruction.
+        #[arg(long)]
+        mask: bool,
+        /// Longest-edge (px) to downscale inputs to.
+        #[arg(long, default_value_t = 1600)]
+        max_edge: u32,
+        /// Target triangle budget.
+        #[arg(long, default_value_t = 1500)]
+        target_tris: usize,
+        /// Pixelated texture size (longest edge, px).
+        #[arg(long, default_value_t = 128)]
+        texture_size: u32,
+        /// Palette colour count for the texture.
+        #[arg(long, default_value_t = 256)]
+        palette_colors: u16,
     },
     /// Reconstruct a textured mesh from photos (COLMAP + OpenMVS). [Phase 1]
     Reconstruct {
@@ -72,6 +90,32 @@ enum Commands {
         #[arg(long)]
         no_normalize: bool,
     },
+    /// Batch end-to-end over a directory of objects (one photo subfolder each).
+    /// Resumable; a per-object failure is logged and does not stop the batch.
+    Batch {
+        /// Directory with one subfolder of photos per object.
+        input_dir: PathBuf,
+        /// Output directory for the `.glb` assets + manifest.
+        output_dir: PathBuf,
+        /// Remove the background (rembg) before reconstruction.
+        #[arg(long)]
+        mask: bool,
+        /// Longest-edge (px) to downscale inputs to.
+        #[arg(long, default_value_t = 1600)]
+        max_edge: u32,
+        /// Target triangle budget.
+        #[arg(long, default_value_t = 1500)]
+        target_tris: usize,
+        /// Pixelated texture size (longest edge, px).
+        #[arg(long, default_value_t = 128)]
+        texture_size: u32,
+        /// Palette colour count for the texture.
+        #[arg(long, default_value_t = 256)]
+        palette_colors: u16,
+        /// Re-process objects even if their output already exists.
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 fn main() -> Result<()> {
@@ -79,11 +123,33 @@ fn main() -> Result<()> {
 
     match Cli::parse().command {
         Commands::Doctor => doctor(),
-        Commands::Process { input, output } => {
-            let pipeline = Pipeline::new(PipelineConfig::default());
-            let out = pipeline.run(&input, &output)?;
-            println!("wrote {}", out.display());
-            Ok(())
+        Commands::Process {
+            photos,
+            out,
+            work,
+            mask,
+            max_edge,
+            target_tris,
+            texture_size,
+            palette_colors,
+        } => {
+            let work = work.unwrap_or_else(|| default_work_dir(&out));
+            let recon = ReconOpts {
+                no_downscale: false,
+                mask,
+                max_edge,
+            };
+            let lofi_opts = LofiOpts {
+                target_tris,
+                no_decimate: false,
+                texture_size,
+                palette_colors,
+                no_pixelate: false,
+                keep_floaters: false,
+                no_normalize: false,
+            };
+            let mesh = reconstruct(&photos, &work, &recon)?;
+            lofi(&mesh, &out, &lofi_opts)
         }
         Commands::Reconstruct {
             images,
@@ -91,7 +157,16 @@ fn main() -> Result<()> {
             no_downscale,
             mask,
             max_edge,
-        } => reconstruct(&images, &work, no_downscale, mask, max_edge),
+        } => {
+            let opts = ReconOpts {
+                no_downscale,
+                mask,
+                max_edge,
+            };
+            let mesh = reconstruct(&images, &work, &opts)?;
+            println!("textured mesh: {}", mesh.display());
+            Ok(())
+        }
         Commands::Lofi {
             mesh,
             out,
@@ -113,6 +188,35 @@ fn main() -> Result<()> {
                 no_normalize,
             };
             lofi(&mesh, &out, &opts)
+        }
+        Commands::Batch {
+            input_dir,
+            output_dir,
+            mask,
+            max_edge,
+            target_tris,
+            texture_size,
+            palette_colors,
+            force,
+        } => {
+            let opts = BatchOpts {
+                recon: ReconOpts {
+                    no_downscale: false,
+                    mask,
+                    max_edge,
+                },
+                lofi: LofiOpts {
+                    target_tris,
+                    no_decimate: false,
+                    texture_size,
+                    palette_colors,
+                    no_pixelate: false,
+                    keep_floaters: false,
+                    no_normalize: false,
+                },
+                force,
+            };
+            batch(&input_dir, &output_dir, &opts)
         }
     }
 }
@@ -176,29 +280,38 @@ fn lofi(mesh_path: &Path, out: &Path, opts: &LofiOpts) -> Result<()> {
     Ok(())
 }
 
-/// [Phase 1] Reconstruct a textured mesh from photos: preprocess (downscale,
-/// optional background masking), then COLMAP SfM + OpenMVS dense/mesh/texture.
-fn reconstruct(
-    images: &Path,
-    work: &Path,
+struct ReconOpts {
     no_downscale: bool,
     mask: bool,
     max_edge: u32,
-) -> Result<()> {
+}
+
+/// Default scratch dir for `process`: "<out-stem>.work" beside the output.
+fn default_work_dir(out: &Path) -> PathBuf {
+    let stem = out
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "modelgen".to_string());
+    out.with_file_name(format!("{stem}.work"))
+}
+
+/// [Phase 1] Reconstruct a textured mesh from photos: preprocess (downscale,
+/// optional background masking), then COLMAP SfM + OpenMVS. Returns the mesh path.
+fn reconstruct(images: &Path, work: &Path, opts: &ReconOpts) -> Result<PathBuf> {
     use modelgen_core::preprocess;
 
     // Downscale (unless skipped) to keep CPU reconstruction tractable.
-    let downscaled = if no_downscale {
+    let downscaled = if opts.no_downscale {
         images.to_path_buf()
     } else {
         let out = work.join("images");
-        let n = preprocess::downscale_images(images, &out, max_edge)?;
+        let n = preprocess::downscale_images(images, &out, opts.max_edge)?;
         println!("downscaled {n} image(s)");
         out
     };
 
     // Optionally remove the background so the reconstructed mesh is object-only.
-    let input = if mask {
+    let input = if opts.mask {
         let out = work.join("masked");
         let n = preprocess::mask_images(&downscaled, &out, &work.join("masks"))?;
         println!("masked {n} image(s) (background removed)");
@@ -207,8 +320,71 @@ fn reconstruct(
         downscaled
     };
 
-    let result = modelgen_core::reconstruct::run(&input, work)?;
-    println!("textured mesh: {}", result.textured_mesh.display());
+    Ok(modelgen_core::reconstruct::run(&input, work)?.textured_mesh)
+}
+
+struct BatchOpts {
+    recon: ReconOpts,
+    lofi: LofiOpts,
+    force: bool,
+}
+
+/// [Phase 4] Batch end-to-end over a directory of object subfolders. Resumable
+/// (skips objects whose output already exists) and fault-tolerant (a failed
+/// object is recorded and the batch continues). Writes a `manifest.txt`.
+fn batch(input_dir: &Path, output_dir: &Path, opts: &BatchOpts) -> Result<()> {
+    std::fs::create_dir_all(output_dir)?;
+
+    let mut objects: Vec<PathBuf> = std::fs::read_dir(input_dir)?
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| p.is_dir())
+        .collect();
+    objects.sort();
+    if objects.is_empty() {
+        println!("no object subdirectories found in {}", input_dir.display());
+        return Ok(());
+    }
+    println!("batch: {} object(s)", objects.len());
+
+    let mut manifest = String::new();
+    let (mut ok, mut failed, mut skipped) = (0u32, 0u32, 0u32);
+    for obj in &objects {
+        let name = obj
+            .file_name()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let out = output_dir.join(format!("{name}.glb"));
+
+        if out.exists() && !opts.force {
+            println!("[skip] {name}");
+            manifest.push_str(&format!("skipped\t{name}\n"));
+            skipped += 1;
+        } else {
+            println!("[run ] {name}");
+            let work = output_dir.join(format!("{name}.work"));
+            // Catch per-object failures so one bad object doesn't abort the batch.
+            let result = (|| -> Result<()> {
+                let mesh = reconstruct(obj, &work, &opts.recon)?;
+                lofi(&mesh, &out, &opts.lofi)
+            })();
+            match result {
+                Ok(()) => {
+                    println!("[ ok ] {name}");
+                    manifest.push_str(&format!("ok\t{name}\n"));
+                    ok += 1;
+                }
+                Err(e) => {
+                    eprintln!("[fail] {name}: {e}");
+                    manifest.push_str(&format!("failed\t{name}\t{e}\n"));
+                    failed += 1;
+                }
+            }
+        }
+        // Persist the manifest after each object (progress survives interruption).
+        std::fs::write(output_dir.join("manifest.txt"), &manifest)?;
+    }
+
+    println!("\nbatch complete: {ok} ok, {failed} failed, {skipped} skipped");
     Ok(())
 }
 
