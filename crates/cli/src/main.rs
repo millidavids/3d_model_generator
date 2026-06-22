@@ -89,6 +89,13 @@ enum Commands {
         /// Skip normalization (centering + unit scaling).
         #[arg(long)]
         no_normalize: bool,
+        /// Re-UV + rebake the texture via native Blender (host-only): cleaner
+        /// texel density than the kept atlas.
+        #[arg(long)]
+        rebake: bool,
+        /// Blender binary path (else $BLENDER, then PATH, then the macOS app).
+        #[arg(long)]
+        blender: Option<PathBuf>,
     },
     /// Batch end-to-end over a directory of objects (one photo subfolder each).
     /// Resumable; a per-object failure is logged and does not stop the batch.
@@ -147,6 +154,8 @@ fn main() -> Result<()> {
                 no_pixelate: false,
                 keep_floaters: false,
                 no_normalize: false,
+                rebake: false,
+                blender: None,
             };
             let mesh = reconstruct(&photos, &work, &recon)?;
             lofi(&mesh, &out, &lofi_opts)
@@ -177,6 +186,8 @@ fn main() -> Result<()> {
             no_pixelate,
             keep_floaters,
             no_normalize,
+            rebake,
+            blender,
         } => {
             let opts = LofiOpts {
                 target_tris,
@@ -186,6 +197,8 @@ fn main() -> Result<()> {
                 no_pixelate,
                 keep_floaters,
                 no_normalize,
+                rebake,
+                blender,
             };
             lofi(&mesh, &out, &opts)
         }
@@ -213,6 +226,8 @@ fn main() -> Result<()> {
                     no_pixelate: false,
                     keep_floaters: false,
                     no_normalize: false,
+                    rebake: false,
+                    blender: None,
                 },
                 force,
             };
@@ -229,13 +244,15 @@ struct LofiOpts {
     no_pixelate: bool,
     keep_floaters: bool,
     no_normalize: bool,
+    rebake: bool,
+    blender: Option<PathBuf>,
 }
 
 /// [Phase 2] Convert a reconstructed textured mesh to a lo-fi glTF asset: import
 /// → heal (largest component) → decimate → normalize → pixelate → glTF export
 /// (unlit + nearest).
 fn lofi(mesh_path: &Path, out: &Path, opts: &LofiOpts) -> Result<()> {
-    use modelgen_core::{export, mesh, texture};
+    use modelgen_core::{export, mesh, rebake, texture};
 
     let mut m = mesh::load_textured_ply(mesh_path)?;
     println!(
@@ -256,6 +273,21 @@ fn lofi(mesh_path: &Path, out: &Path, opts: &LofiOpts) -> Result<()> {
             m.triangle_count(),
             m.vertex_count()
         );
+    }
+
+    if opts.rebake {
+        let blender = opts
+            .blender
+            .clone()
+            .or_else(rebake::find_blender)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Blender not found — install it, pass --blender <path>, or set $BLENDER"
+                )
+            })?;
+        let bake_size = (opts.texture_size * 4).clamp(256, 2048);
+        m = rebake::rebake(&m, &out.with_extension("rebake"), &blender, bake_size)?;
+        println!("rebaked via Blender: clean UVs + {bake_size}px texture");
     }
 
     if !opts.no_normalize {

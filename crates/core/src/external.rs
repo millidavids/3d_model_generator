@@ -70,7 +70,7 @@ pub fn check_tools() -> Vec<ToolStatus> {
 ///
 /// Uses `command -v`, which is portable across the Linux container and the
 /// macOS host shell.
-fn is_on_path(tool: &str) -> bool {
+pub(crate) fn is_on_path(tool: &str) -> bool {
     Command::new("sh")
         .arg("-c")
         .arg(format!("command -v {tool}"))

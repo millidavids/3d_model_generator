@@ -17,6 +17,7 @@ pub mod external;
 pub mod mesh;
 pub mod pipeline;
 pub mod preprocess;
+pub mod rebake;
 pub mod reconstruct;
 pub mod texture;
 

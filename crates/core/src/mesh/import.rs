@@ -43,7 +43,9 @@ pub fn load_textured_ply(ply_path: &Path) -> Result<Mesh> {
                 .get(idx[k])
                 .ok_or_else(|| gate("face references a missing vertex"))?;
             mesh.positions.push(p);
-            mesh.uvs.push([tc[k * 2], tc[k * 2 + 1]]);
+            // OpenMVS UVs are bottom-left origin; flip V to our top-left (glTF)
+            // convention so the texture maps correctly on export and rebake.
+            mesh.uvs.push([tc[k * 2], 1.0 - tc[k * 2 + 1]]);
             mesh.indices.push(mesh.indices.len() as u32);
         }
     }

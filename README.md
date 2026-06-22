@@ -23,6 +23,12 @@ photos/ ──> [reconstruct] ──> textured mesh ──> [lo-fi] ──> obje
    floaters) → decimate to a triangle budget (`meshopt`) → center + unit-scale →
    pixelate the texture (downscale + `quantette` palette) → export a
    self-contained `.glb` with `KHR_materials_unlit` + a nearest-neighbour sampler.
+3. **Optional quality rebake** (`lofi --rebake`, host-only): before pixelating,
+   hand the low-poly mesh to **native Blender** to Smart-UV-unwrap it and bake
+   the texture onto a clean, even-texel layout (Cycles; Metal GPU on Apple
+   Silicon, else CPU). Fixes the uneven texel density of the decimated kept
+   atlas. There is no arm64-Linux Blender, so this runs host-side (where the
+   pure-Rust back-half can also run), not in the container.
 
 The "PS1 feel" that *isn't* in the asset — vertex jitter, affine texture warp,
 framebuffer dithering, low-res rendering — is deliberately left to the game
