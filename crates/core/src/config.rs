@@ -6,6 +6,10 @@
 use serde::{Deserialize, Serialize};
 
 /// Top-level configuration controlling a single pipeline run.
+///
+/// This is the serializable "profile" form (a future TOML config); the
+/// operational settings the pipeline functions take are
+/// [`crate::pipeline::ReconstructConfig`] and [`crate::pipeline::LofiConfig`].
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PipelineConfig {
@@ -16,8 +20,6 @@ pub struct PipelineConfig {
     pub texture_size: u32,
     /// Maximum number of colours in the quantized palette.
     pub palette_colors: u16,
-    /// Which Blender bake backend to use.
-    pub bake: BakeBackend,
 }
 
 impl Default for PipelineConfig {
@@ -26,23 +28,6 @@ impl Default for PipelineConfig {
             target_triangles: 1_000,
             texture_size: 128,
             palette_colors: 256,
-            bake: BakeBackend::default(),
         }
     }
-}
-
-/// Where the Blender bake runs.
-///
-/// Defaults to running inside the container on CPU (clone-and-go). On the
-/// Apple-Silicon Mac the host-native backend is preferred — it uses the
-/// official macOS Blender (Metal GPU) and sidesteps the absence of an official
-/// arm64-Linux Blender build.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum BakeBackend {
-    /// Blender inside the container, CPU.
-    #[default]
-    ContainerCpu,
-    /// Native Blender on the host (GPU; also the arm64-macOS path).
-    HostNative,
 }

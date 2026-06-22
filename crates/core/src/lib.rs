@@ -6,9 +6,9 @@
 //! reconstruction (COLMAP, OpenMVS) and texture baking (Blender) run as
 //! external subprocesses — see [`external`].
 //!
-//! The crate is deliberately UI-agnostic so a future web-service backend can
-//! reuse it as a library, exactly as the [`crate::pipeline::Pipeline`] is used
-//! by the `modelgen` CLI today.
+//! The crate is deliberately UI-agnostic: the [`pipeline`] module is the entry
+//! point the `modelgen` CLI drives today, and a future web-service backend can
+//! reuse the same functions.
 
 pub mod config;
 pub mod error;
@@ -20,7 +20,8 @@ pub mod preprocess;
 pub mod rebake;
 pub mod reconstruct;
 pub mod texture;
+pub mod validate;
 
 pub use config::PipelineConfig;
 pub use error::{Error, Result};
-pub use pipeline::Pipeline;
+pub use pipeline::{LofiConfig, Pipeline, ReconstructConfig};
