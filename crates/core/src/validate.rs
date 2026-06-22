@@ -51,3 +51,27 @@ fn invalid(reason: String) -> Error {
         reason,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{require_file, require_image_dir};
+
+    #[test]
+    fn require_file_distinguishes_present_and_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("mesh.ply");
+        std::fs::write(&f, b"x").unwrap();
+        assert!(require_file(&f, "mesh").is_ok());
+        assert!(require_file(&dir.path().join("missing.ply"), "mesh").is_err());
+    }
+
+    #[test]
+    fn require_image_dir_needs_an_image() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(require_image_dir(dir.path()).is_err()); // empty
+        std::fs::write(dir.path().join("readme.txt"), b"x").unwrap();
+        assert!(require_image_dir(dir.path()).is_err()); // no images
+        std::fs::write(dir.path().join("a.JPG"), b"x").unwrap();
+        assert!(require_image_dir(dir.path()).is_ok()); // case-insensitive ext
+    }
+}

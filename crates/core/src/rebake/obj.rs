@@ -91,3 +91,43 @@ fn obj_err(reason: impl Into<String>) -> Error {
         reason: reason.into(),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{read_obj, write_obj};
+    use crate::mesh::Mesh;
+
+    #[test]
+    fn round_trips_geometry_and_uv() {
+        let dir = tempfile::tempdir().unwrap();
+        let tex = dir.path().join("src.png");
+        image::RgbImage::from_pixel(4, 4, image::Rgb([10, 20, 30]))
+            .save(&tex)
+            .unwrap();
+
+        let mesh = Mesh {
+            positions: vec![[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]],
+            uvs: vec![[0.0, 0.2], [1.0, 0.2], [0.0, 0.9]],
+            indices: vec![0, 1, 2],
+            texture: Some(tex),
+        };
+        let obj = write_obj(&mesh, dir.path(), "rt").unwrap();
+        let back = read_obj(&obj).unwrap();
+
+        assert_eq!(back.triangle_count(), 1);
+        assert_eq!(back.positions.len(), 3);
+
+        // The V double-flip (write then read) must restore the original UVs.
+        let mut got: Vec<(f32, f32)> = back.uvs.iter().map(|v| (v[0], v[1])).collect();
+        let mut want = vec![(0.0, 0.2), (1.0, 0.2), (0.0, 0.9)];
+        let key = |p: &(f32, f32)| (p.0 * 1000.0) as i32 * 100_000 + (p.1 * 1000.0) as i32;
+        got.sort_by_key(key);
+        want.sort_by_key(key);
+        for (g, w) in got.iter().zip(&want) {
+            assert!(
+                (g.0 - w.0).abs() < 1e-4 && (g.1 - w.1).abs() < 1e-4,
+                "{g:?} vs {w:?}"
+            );
+        }
+    }
+}

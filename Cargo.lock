@@ -790,6 +790,7 @@ dependencies = [
  "quantette",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror",
  "tobj",
  "tracing",

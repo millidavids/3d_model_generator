@@ -20,3 +20,6 @@ meshopt = "0.6.2"
 bytemuck = { version = "1.25.0", features = ["derive"] }
 quantette = { version = "0.6.0", features = ["image", "threads"] }
 tobj = "4.0.4"
+
+[dev-dependencies]
+tempfile = "3.27.0"
