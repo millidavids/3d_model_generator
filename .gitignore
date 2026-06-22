@@ -1,0 +1,9 @@
+# Rust build artifacts
+/target
+
+# Pipeline working data (mounted into the container as /work)
+/work
+
+# OS / editor cruft
+.DS_Store
+*.rs.bk

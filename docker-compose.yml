@@ -1,0 +1,14 @@
+# Run the pipeline / batch jobs from the slim runtime image.
+# `./work` is the shared bind mount (inputs/outputs + host<->container bake handoff).
+services:
+  modelgen:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: runtime
+    image: modelgen:runtime
+    volumes:
+      - ./work:/work
+    extra_hosts:
+      # Lets the container reach a host-native Blender bake worker (Phase 5).
+      - "host.docker.internal:host-gateway"

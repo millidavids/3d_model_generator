@@ -1,0 +1,22 @@
+{
+  "name": "modelgen",
+  "build": {
+    "dockerfile": "../docker/Dockerfile",
+    "context": "..",
+    "target": "dev"
+  },
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+  "//": "Named volumes keep target/ and the cargo registry off the slow bind mount (3.5-10x faster cargo on Docker Desktop). Requires VirtioFS file sharing.",
+  "mounts": [
+    "source=modelgen-target,target=/workspace/target,type=volume",
+    "source=modelgen-cargo-registry,target=/usr/local/cargo/registry,type=volume"
+  ],
+  "//runArgs": "host-gateway lets the container reach a host-native Blender bake worker.",
+  "runArgs": ["--add-host=host.docker.internal:host-gateway"],
+  "customizations": {
+    "vscode": {
+      "extensions": ["rust-lang.rust-analyzer", "tamasfe.even-better-toml"]
+    }
+  }
+}

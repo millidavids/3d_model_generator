@@ -1,0 +1,20 @@
+# Conda (conda-forge) packages for the runtime image's base env.
+# COLMAP pinned to its CPU build (the `cpu*` build string) so the solver does
+# not drag in CUDA.
+#
+# NOTE: conda-forge's colmap cpu/aarch64 build LINKS libfaiss + OpenImageIO but
+# fails to DECLARE them as dependencies, so `colmap` aborts with
+# "libfaiss.so: cannot open shared object file" unless we pin them explicitly.
+# (libfaiss cpu build; openimageio 3.1.x provides the libOpenImageIO.so.3.1 the
+# binary needs.)
+#
+# TODO(pin): generate conda-lock.yml from this for full reproducibility.
+name: base
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - colmap=4.0.4=cpu*
+  - "libfaiss=*=*cpu*"
+  - openimageio=3.1.*
+  - pip
