@@ -66,9 +66,14 @@ cargo run --release --bin modelgen -- \
     process /workspace/photos /workspace/out/object.glb --mask
 ```
 
-> Packaging note: the compiled `modelgen` binary is not yet baked into the slim
-> `runtime` image (a Phase-0-polish TODO) — for now run it from the `dev` image
-> via `cargo run`.
+Or use the slim `runtime` image, which bakes in the compiled `modelgen` binary
+(no `cargo` needed):
+
+```bash
+docker build --target runtime -t modelgen:runtime -f docker/Dockerfile .
+docker run --rm -v "$PWD/data":/work modelgen:runtime \
+    modelgen process /work/photos /work/object.glb --mask
+```
 
 ## Commands
 

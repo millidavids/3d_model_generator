@@ -3,7 +3,8 @@
 # Lo-fi 3D asset generator — reconstruction toolchain image (multi-stage).
 #
 #   builder  → compiles OpenMVS from source (CPU, no SSE = arm64-safe), deps via apt
-#   runtime  → COLMAP (conda, CPU) + OpenMVS + rembg on PATH (the server base)
+#   appbuild → compiles the modelgen release binary (Rust)
+#   runtime  → COLMAP (conda, CPU) + OpenMVS + rembg + modelgen on PATH (server base)
 #   dev      → runtime + Rust toolchain (used by the devcontainer)
 #
 # Strategy: OpenMVS build deps come from APT (its Eigen 3 / Boost stay isolated
@@ -75,7 +76,30 @@ RUN cmake -S openMVS -B /build/openMVS -G Ninja \
 # parallelism — matches OpenMVS's own `make -j4`.
 RUN cmake --build /build/openMVS --target install -j4
 
-# --- runtime: COLMAP + OpenMVS + rembg on PATH -------------------------------
+# --- appbuild: compile the modelgen release binary ---------------------------
+# Same base as runtime, so the dynamically-linked binary's glibc matches.
+FROM ${MINIFORGE} AS appbuild
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl ca-certificates build-essential pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+      | sh -s -- -y --default-toolchain 1.93.1 --profile minimal
+WORKDIR /app
+# Only what the build needs (scripts/ holds the include_str!'d Blender rebake
+# script). The release binary is copied OUT of the target cache mount so it
+# survives into this stage's layer for the runtime COPY below.
+COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY crates ./crates
+COPY scripts ./scripts
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/app/target \
+    cargo build --release --bin modelgen && \
+    cp target/release/modelgen /usr/local/bin/modelgen
+
+# --- runtime: COLMAP + OpenMVS + rembg + modelgen on PATH --------------------
 FROM ${MINIFORGE} AS runtime
 ARG INSTALL_BLENDER=0
 
@@ -112,6 +136,10 @@ RUN if [ "${INSTALL_BLENDER}" = "1" ]; then \
 COPY --from=builder /opt/openmvs /opt/openmvs
 # OpenMVS installs its binaries under <prefix>/bin/OpenMVS — expose both.
 ENV PATH=/opt/openmvs/bin/OpenMVS:/opt/openmvs/bin:$PATH
+
+# The modelgen CLI itself (release binary), so the image runs without cargo:
+#   docker run --rm modelgen:runtime modelgen doctor
+COPY --from=appbuild /usr/local/bin/modelgen /usr/local/bin/modelgen
 
 # Shared working dir: bind-mounted at runtime; also the host<->container bake dir.
 WORKDIR /work
