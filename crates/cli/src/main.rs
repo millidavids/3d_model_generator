@@ -44,6 +44,13 @@ enum Commands {
         #[arg(long, default_value_t = 1600)]
         max_edge: u32,
     },
+    /// Convert a reconstructed textured mesh to a lo-fi glTF asset. [Phase 2 — WIP]
+    Lofi {
+        /// Path to the OpenMVS textured mesh (`.ply`).
+        mesh: PathBuf,
+        /// Output `.glb` path.
+        out: PathBuf,
+    },
 }
 
 fn main() -> Result<()> {
@@ -64,7 +71,23 @@ fn main() -> Result<()> {
             mask,
             max_edge,
         } => reconstruct(&images, &work, no_downscale, mask, max_edge),
+        Commands::Lofi { mesh, out } => lofi(&mesh, &out),
     }
+}
+
+/// [Phase 2 — WIP] Convert a reconstructed textured mesh to a lo-fi glTF asset.
+/// Currently a passthrough (import → glTF export); decimation and texture
+/// pixelation slot in between next.
+fn lofi(mesh_path: &Path, out: &Path) -> Result<()> {
+    let mesh = modelgen_core::mesh::load_textured_ply(mesh_path)?;
+    println!(
+        "loaded mesh: {} triangles, {} vertices",
+        mesh.triangle_count(),
+        mesh.vertex_count(),
+    );
+    modelgen_core::export::write_glb(&mesh, out)?;
+    println!("wrote {}", out.display());
+    Ok(())
 }
 
 /// [Phase 1] Reconstruct a textured mesh from photos: preprocess (downscale,

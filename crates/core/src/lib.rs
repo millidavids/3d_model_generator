@@ -12,7 +12,9 @@
 
 pub mod config;
 pub mod error;
+pub mod export;
 pub mod external;
+pub mod mesh;
 pub mod pipeline;
 pub mod preprocess;
 pub mod reconstruct;
