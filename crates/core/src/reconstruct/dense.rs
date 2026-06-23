@@ -78,5 +78,8 @@ pub fn run(colmap_scene: &Path, work_dir: &Path) -> Result<PathBuf> {
     )?;
 
     gates::require_nonempty("texture", &textured)?;
+    // OpenMVS references the texture as a sidecar PNG; embed it so the .glb is a
+    // single self-contained file (and survives `--clean`).
+    super::embed::embed_textures(&textured)?;
     Ok(textured)
 }

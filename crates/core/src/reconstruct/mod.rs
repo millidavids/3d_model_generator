@@ -6,6 +6,7 @@
 //! clearly on degenerate output (e.g. too few images registered).
 
 mod dense;
+mod embed;
 mod gates;
 mod sfm;
 
@@ -15,7 +16,8 @@ use std::path::{Path, PathBuf};
 /// Artifacts produced by a reconstruction run.
 #[derive(Debug)]
 pub struct Reconstruction {
-    /// The textured mesh (PLY + sibling texture image) from OpenMVS TextureMesh.
+    /// The textured mesh — a self-contained glTF `.glb` (geometry + UVs +
+    /// embedded texture).
     pub textured_mesh: PathBuf,
 }
 
