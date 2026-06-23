@@ -20,14 +20,27 @@ pub fn decimate(mesh: &Mesh, target_triangles: usize) -> Mesh {
             0,
         )
         .expect("interleaved Vertex is a valid meshopt vertex layout");
-        meshopt::simplify(
+        // Topology-preserving pass with a generous error budget (1.0 = 100%);
+        // lo-fi tolerates large geometric error, and this lets it collapse
+        // interior detail aggressively.
+        let simplified = meshopt::simplify(
             &welded_indices,
             &adapter,
             target_index_count,
-            0.05, // target error (0..1) — generous; the lo-fi target is forgiving
+            1.0,
             SimplifyOptions::empty(),
             None,
-        )
+        );
+        // Photogrammetry meshes have many open boundary edges that `simplify`
+        // refuses to collapse, so it can stop far above the budget. When it
+        // does, force the budget with the sloppy simplifier (ignores topology) —
+        // acceptable for a lo-fi asset whose texture is pixelated anyway.
+        if simplified.len() > target_index_count * 3 / 2 {
+            // Run the sloppy pass on the already-simplified mesh (cleaner input).
+            meshopt::simplify_sloppy(&simplified, &adapter, target_index_count, 1.0, None)
+        } else {
+            simplified
+        }
     } else {
         welded_indices
     };
