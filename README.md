@@ -46,12 +46,15 @@ docker build --target runtime -t modelgen:runtime -f docker/Dockerfile .
 # check the toolchain
 docker run --rm modelgen:runtime modelgen doctor
 
-# reconstruct one object: photos -> work/ (writes scene_textured.glb)
+# reconstruct one object -> data/out/scene_textured.glb
+# --mask removes the background (object on a surface);
+# --clean deletes all intermediates, leaving only the .glb
 docker run --rm -v "$PWD/data":/work modelgen:runtime \
-    modelgen reconstruct /work/photos /work/out --mask
+    modelgen reconstruct /work/photos /work/out --mask --clean
 ```
 
-The result is `data/out/scene_textured.glb`.
+The result is `data/out/scene_textured.glb` — with `--clean`, the only file there
+(a run otherwise leaves hundreds of MB of intermediates behind).
 
 ## Commands
 
@@ -76,9 +79,12 @@ mesh, e.g. from Apple Object Capture on the Mac).
 ## Capturing good photos
 
 - Many overlapping angles (≈ 60–80% overlap), including top and bottom.
-- **Textured, matte** surfaces reconstruct best. Uniform/shiny/featureless
-  objects (a plain white statue, glass, mirrors) reconstruct poorly — SfM needs
-  visual features. No generative fallback exists in an all-local CPU pipeline.
+- **Textured, matte** surfaces reconstruct best. Smooth, uniform, or shiny
+  objects (a blank wall, polished metal, glass, mirrors) reconstruct poorly — SfM
+  needs visual features to match between photos. Surface relief rescues even a
+  light-coloured object: a white Buddha head with bumpy detail reconstructs fine,
+  a smooth white egg would not. No generative fallback exists in an all-local CPU
+  pipeline.
 - Even, diffuse lighting; avoid harsh shadows and reflections.
 - Object on a surface → use `--mask`, or the flat surface dominates the result.
 - Shoot **JPEG/PNG** (HEIC isn't decoded yet).
