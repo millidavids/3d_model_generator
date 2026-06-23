@@ -62,7 +62,8 @@ The result is `data/out/scene_textured.glb`.
 | `batch <in_dir> <out_dir>` | Reconstruct every photo subfolder; resumable, fault-tolerant, writes `manifest.txt`. |
 
 Options: `--mask` (remove background), `--max-edge N` (downscale, default 1600),
-`--no-downscale`. See `--help` on any command.
+`--no-downscale`, `--clean` (after a successful run, delete all intermediates and
+leave only `scene_textured.glb`). See `--help` on any command.
 
 ## Downstream: making it lo-fi
 

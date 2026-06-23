@@ -41,6 +41,9 @@ enum Commands {
         /// Longest-edge (px) to downscale inputs to before reconstruction.
         #[arg(long, default_value_t = 1600)]
         max_edge: u32,
+        /// Delete all intermediates after a successful run, keeping only the .glb.
+        #[arg(long)]
+        clean: bool,
     },
     /// Reconstruct every object in a directory (one photo subfolder each).
     /// Resumable; a per-object failure is logged and does not stop the batch.
@@ -55,6 +58,9 @@ enum Commands {
         /// Longest-edge (px) to downscale inputs to.
         #[arg(long, default_value_t = 1600)]
         max_edge: u32,
+        /// Delete each object's intermediates, keeping only its .glb.
+        #[arg(long)]
+        clean: bool,
         /// Re-process objects even if their output already exists.
         #[arg(long)]
         force: bool,
@@ -73,11 +79,13 @@ fn main() -> Result<()> {
             no_downscale,
             mask,
             max_edge,
+            clean,
         } => {
             let cfg = ReconstructConfig {
                 downscale: !no_downscale,
                 mask,
                 max_edge,
+                clean,
             };
             let mesh = pipeline::reconstruct(&images, &work, &cfg)?;
             println!("textured mesh: {}", mesh.display());
@@ -89,6 +97,7 @@ fn main() -> Result<()> {
             output_dir,
             mask,
             max_edge,
+            clean,
             force,
         } => {
             let opts = commands::BatchOpts {
@@ -96,6 +105,7 @@ fn main() -> Result<()> {
                     downscale: true,
                     mask,
                     max_edge,
+                    clean,
                 },
                 force,
             };

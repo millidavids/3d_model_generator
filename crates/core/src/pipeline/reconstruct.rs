@@ -13,6 +13,9 @@ pub struct ReconstructConfig {
     pub mask: bool,
     /// Longest-edge pixel cap when downscaling.
     pub max_edge: u32,
+    /// After a successful run, delete every intermediate in the work dir and
+    /// keep only the final `.glb`.
+    pub clean: bool,
 }
 
 impl Default for ReconstructConfig {
@@ -21,6 +24,7 @@ impl Default for ReconstructConfig {
             downscale: true,
             mask: false,
             max_edge: 1600,
+            clean: false,
         }
     }
 }
@@ -48,5 +52,58 @@ pub fn reconstruct(photos: &Path, work: &Path, cfg: &ReconstructConfig) -> Resul
         downscaled
     };
 
-    Ok(crate::reconstruct::run(&input, work)?.textured_mesh)
+    let mesh = crate::reconstruct::run(&input, work)?.textured_mesh;
+
+    if cfg.clean {
+        clean_intermediates(work, &mesh)?;
+        tracing::info!(kept = %mesh.display(), "cleaned intermediates");
+    }
+    Ok(mesh)
+}
+
+/// Delete everything in `work` except the final artifact `keep` (the `.glb`),
+/// reclaiming the reconstruction's intermediates — downscaled/masked images,
+/// the dense cloud, per-view depth maps, the COLMAP database, and OpenMVS
+/// scene files — which together can run to hundreds of MB per object.
+///
+/// Only invoked after a successful run (the `.glb` exists), so a failed run
+/// keeps its intermediates for debugging.
+fn clean_intermediates(work: &Path, keep: &Path) -> Result<()> {
+    let keep_name = keep.file_name();
+    for entry in std::fs::read_dir(work)? {
+        let path = entry?.path();
+        if path.file_name() == keep_name {
+            continue;
+        }
+        if path.is_dir() {
+            std::fs::remove_dir_all(&path)?;
+        } else {
+            std::fs::remove_file(&path)?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::clean_intermediates;
+
+    #[test]
+    fn keeps_only_the_glb() {
+        let dir = tempfile::tempdir().unwrap();
+        let work = dir.path();
+        let glb = work.join("scene_textured.glb");
+        std::fs::write(&glb, b"GLB").unwrap();
+        std::fs::write(work.join("scene_dense.ply"), b"junk").unwrap(); // a file
+        std::fs::create_dir(work.join("images")).unwrap(); // a dir
+        std::fs::write(work.join("images/a.jpg"), b"img").unwrap();
+
+        clean_intermediates(work, &glb).unwrap();
+
+        let left: Vec<_> = std::fs::read_dir(work)
+            .unwrap()
+            .map(|e| e.unwrap().file_name())
+            .collect();
+        assert_eq!(left, ["scene_textured.glb"]);
+    }
 }
