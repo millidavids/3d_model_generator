@@ -1,22 +1,20 @@
-//! `modelgen batch` — process a directory of objects end-to-end.
+//! `modelgen batch` — reconstruct a directory of objects.
 
 use anyhow::Result;
-use modelgen_core::pipeline::{self, LofiConfig, ReconstructConfig};
+use modelgen_core::pipeline::{self, ReconstructConfig};
 use std::path::{Path, PathBuf};
 
-/// Front + back-half settings shared by every object in a batch.
+/// Settings shared by every object in a batch.
 pub struct BatchOpts {
     /// Reconstruction settings (downscale, mask, max edge).
     pub recon: ReconstructConfig,
-    /// Lo-fi back-half settings (budgets, pixelation).
-    pub lofi: LofiConfig,
     /// Re-process objects even if their output already exists.
     pub force: bool,
 }
 
-/// Batch end-to-end over object subfolders (one folder of photos per object).
-/// Resumable (skips objects whose output exists) and fault-tolerant (a failed
-/// object is logged to `manifest.txt` and the batch continues).
+/// Reconstruct every object subfolder into `output_dir/<name>/`. Resumable
+/// (skips objects already reconstructed) and fault-tolerant (a failed object is
+/// logged to `manifest.txt` and the batch continues).
 pub fn batch(input_dir: &Path, output_dir: &Path, opts: &BatchOpts) -> Result<()> {
     std::fs::create_dir_all(output_dir)?;
 
@@ -38,24 +36,18 @@ pub fn batch(input_dir: &Path, output_dir: &Path, opts: &BatchOpts) -> Result<()
             .file_name()
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let out = output_dir.join(format!("{name}.glb"));
+        let work = output_dir.join(&name);
 
-        if out.exists() && !opts.force {
+        if is_reconstructed(&work) && !opts.force {
             println!("[skip] {name}");
             manifest.push_str(&format!("skipped\t{name}\n"));
             skipped += 1;
         } else {
             println!("[run ] {name}");
-            let work = output_dir.join(format!("{name}.work"));
-            // Catch per-object failures so one bad object doesn't abort the batch.
-            let result = (|| -> Result<()> {
-                let mesh = pipeline::reconstruct(obj, &work, &opts.recon)?;
-                Ok(pipeline::lofi(&mesh, &out, &opts.lofi)?)
-            })();
-            match result {
-                Ok(()) => {
-                    println!("[ ok ] {name}");
-                    manifest.push_str(&format!("ok\t{name}\n"));
+            match pipeline::reconstruct(obj, &work, &opts.recon) {
+                Ok(mesh) => {
+                    println!("[ ok ] {name} -> {}", mesh.display());
+                    manifest.push_str(&format!("ok\t{name}\t{}\n", mesh.display()));
                     ok += 1;
                 }
                 Err(e) => {
@@ -71,4 +63,9 @@ pub fn batch(input_dir: &Path, output_dir: &Path, opts: &BatchOpts) -> Result<()
 
     println!("\nbatch complete: {ok} ok, {failed} failed, {skipped} skipped");
     Ok(())
+}
+
+/// A reconstruction is "done" if its textured mesh already exists in the work dir.
+fn is_reconstructed(work: &Path) -> bool {
+    work.join("scene_textured.glb").exists() || work.join("scene_textured.ply").exists()
 }

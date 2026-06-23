@@ -8,23 +8,14 @@ pub fn doctor() -> Result<()> {
     println!("Checking external tools:");
     let mut missing_required = 0u32;
     for status in external::check_tools() {
-        let mark = match (status.found, status.required) {
-            (true, _) => "✓",
-            (false, true) => "✗",
-            (false, false) => "—",
-        };
-        let note = if !status.found && !status.required {
-            "  (optional in-container; host-native Blender bake used instead)"
-        } else {
-            ""
-        };
+        let mark = if status.found { "✓" } else { "✗" };
         let ver = status
             .version
             .as_deref()
             .map(|v| format!("  [{v}]"))
             .unwrap_or_default();
-        println!("  {mark} {}{ver}{note}", status.name);
-        if status.required && !status.found {
+        println!("  {mark} {}{ver}", status.name);
+        if !status.found {
             missing_required += 1;
         }
     }

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 ###############################################################################
-# Lo-fi 3D asset generator — reconstruction toolchain image (multi-stage).
+# 3D model generator — CUDA-free photogrammetry reconstruction image (multi-stage).
 #
 #   builder  → compiles OpenMVS from source (CPU, no SSE = arm64-safe), deps via apt
 #   appbuild → compiles the modelgen release binary (Rust)

@@ -1,8 +1,8 @@
 //! Thin wrappers for invoking external tools as subprocesses, plus the
 //! environment checks behind the CLI `doctor` command.
 //!
-//! The heavy lifting lives in C++/Python tools (COLMAP, OpenMVS, Blender,
-//! rembg) that we drive out-of-process. Running them as separate processes —
+//! The heavy lifting lives in C++/Python tools (COLMAP, OpenMVS, rembg) that we
+//! drive out-of-process. Running them as separate processes —
 //! never linking them — also keeps this crate's license independent of the
 //! tools' (notably OpenMVS's AGPL).
 
@@ -12,10 +12,6 @@ use std::process::Command;
 
 /// Single-binary tools that must be present for reconstruction (the core pipeline).
 pub const REQUIRED_TOOLS: &[&str] = &["colmap", "rembg"];
-
-/// The bake tool. Optional *in-container*: there is no arm64-Linux Blender, so on
-/// Apple Silicon the bake runs host-native instead (see the `Baker` design).
-pub const BAKE_TOOL: &str = "blender";
 
 /// OpenMVS ships several binaries; the dense → mesh → texture steps we use.
 pub const OPENMVS_TOOLS: &[&str] = &[
@@ -32,7 +28,7 @@ pub struct ToolStatus {
     pub name: String,
     /// Whether it resolves on `PATH`.
     pub found: bool,
-    /// Whether its absence is a hard failure (vs. optional, e.g. in-container Blender).
+    /// Whether its absence is a hard failure.
     pub required: bool,
     /// The tool's reported `--version` first line, if it resolves and runs.
     pub version: Option<String>,
@@ -45,27 +41,18 @@ pub struct ToolStatus {
 /// prove "binary works" (e.g. onnxruntime can import yet crash with an illegal
 /// instruction on some arm64 setups), and a binary that crashes on launch
 /// yields no version. A fuller fixture-based smoke (a 1-image `rembg`, a tiny
-/// COLMAP/OpenMVS run, a cube bake) remains future work.
+/// COLMAP/OpenMVS run) remains future work.
 pub fn check_tools() -> Vec<ToolStatus> {
-    let mut statuses: Vec<ToolStatus> = REQUIRED_TOOLS
+    REQUIRED_TOOLS
         .iter()
         .chain(OPENMVS_TOOLS.iter())
         .copied()
         .map(|name| status_for(name, true))
-        .collect();
-    // Blender is optional in-container: absent on arm64, where the bake is host-native.
-    statuses.push(status_for(BAKE_TOOL, false));
-    statuses
+        .collect()
 }
 
 fn status_for(name: &str, required: bool) -> ToolStatus {
-    // Blender may live off `PATH` (the macOS app bundle); resolve it the same way
-    // the rebake step does, so doctor reflects what will actually be used.
-    let resolved: Option<PathBuf> = if name == BAKE_TOOL {
-        crate::rebake::find_blender()
-    } else {
-        is_on_path(name).then(|| PathBuf::from(name))
-    };
+    let resolved: Option<PathBuf> = is_on_path(name).then(|| PathBuf::from(name));
     ToolStatus {
         name: name.to_string(),
         found: resolved.is_some(),
