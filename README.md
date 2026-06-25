@@ -26,7 +26,9 @@ downstream concern (see **Downstream** below).
    Motion: camera poses + a sparse cloud, then undistortion. **CPU**, single-camera.
 3. **OpenMVS** ([github.com/cdcseacave/openMVS](https://github.com/cdcseacave/openMVS))
    — dense point cloud → surface mesh → texture. **CPU** (`RefineMesh`, the
-   CUDA-heavy step, is skipped).
+   CUDA-heavy step, is skipped). With `--mask`, the dense step is also handed a
+   per-image *ignore-mask* so it skips the background instead of webbing a thin
+   membrane across narrow concavities (e.g. between a standing person's legs).
 4. **Output** — `scene_textured.glb`: a self-contained glTF (geometry + UVs +
    embedded texture) that imports cleanly into Blender. (OpenMVS's default PLY
    uses per-face UVs that Blender's importer silently drops, so we export glb.)

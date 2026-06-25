@@ -8,6 +8,7 @@
 mod dense;
 mod embed;
 mod gates;
+mod ignore_mask;
 mod sfm;
 
 use crate::error::Result;
@@ -23,7 +24,10 @@ pub struct Reconstruction {
 
 /// Run the reconstruction front-half on a directory of (already preprocessed)
 /// images, writing all artifacts under `work_dir`. Returns the textured mesh.
-pub fn run(images_dir: &Path, work_dir: &Path) -> Result<Reconstruction> {
+///
+/// `masked` indicates the inputs were background-removed onto black, which lets
+/// the dense step ignore that background (see [`dense::run`]).
+pub fn run(images_dir: &Path, work_dir: &Path, masked: bool) -> Result<Reconstruction> {
     std::fs::create_dir_all(work_dir)?;
     // Use an absolute work dir: the OpenMVS tools run with it as their cwd and
     // take absolute file paths, so nothing is re-resolved relative to a working
@@ -32,6 +36,6 @@ pub fn run(images_dir: &Path, work_dir: &Path) -> Result<Reconstruction> {
     // COLMAP SfM + undistortion -> a COLMAP scene OpenMVS can ingest.
     let colmap_scene = sfm::run(images_dir, &work_dir)?;
     // OpenMVS: COLMAP scene -> dense cloud -> mesh -> textured mesh.
-    let textured_mesh = dense::run(&colmap_scene, &work_dir)?;
+    let textured_mesh = dense::run(&colmap_scene, &work_dir, masked)?;
     Ok(Reconstruction { textured_mesh })
 }

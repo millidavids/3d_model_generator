@@ -52,7 +52,7 @@ pub fn reconstruct(photos: &Path, work: &Path, cfg: &ReconstructConfig) -> Resul
         downscaled
     };
 
-    let mesh = crate::reconstruct::run(&input, work)?.textured_mesh;
+    let mesh = crate::reconstruct::run(&input, work, cfg.mask)?.textured_mesh;
 
     if cfg.clean {
         clean_intermediates(work, &mesh)?;
