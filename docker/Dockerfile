@@ -128,16 +128,22 @@ RUN --mount=type=cache,target=/opt/conda/pkgs \
 RUN --mount=type=cache,target=/root/.cache/pip \
         pip install --retries 10 "rembg[cpu,cli]"
 
-# Bake in the u2net model so rembg doesn't download it (~176 MB) on first use —
-# otherwise every fresh `--rm` container re-fetches it before masking can start.
-# U2NET_HOME makes the location explicit and independent of $HOME (rembg honours
-# it). Pinned by sha256, like the other external assets, so the build is
-# reproducible and a corrupted/truncated download fails loudly here, not at run.
+# Bake in the rembg models so it doesn't download them (~176 MB each) on first use
+# — otherwise every fresh `--rm` container re-fetches before masking can start.
+# `u2net` is the default; `u2net_human_seg` backs `--mask-model u2net-human-seg`
+# (cleaner people silhouettes on busy backgrounds). U2NET_HOME makes the location
+# explicit and independent of $HOME (rembg honours it). Pinned by sha256, like the
+# other external assets, so the build is reproducible and a corrupted/truncated
+# download fails loudly here, not at run.
 ENV U2NET_HOME=/opt/u2net
 RUN mkdir -p "$U2NET_HOME" && \
     wget -q -O "$U2NET_HOME/u2net.onnx" \
         https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net.onnx && \
+    wget -q -O "$U2NET_HOME/u2net_human_seg.onnx" \
+        https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2net_human_seg.onnx && \
     echo "8d10d2f3bb75ae3b6d527c77944fc5e7dcd94b29809d47a739a7a728a912b491  $U2NET_HOME/u2net.onnx" \
+        | sha256sum -c - && \
+    echo "01eb6a29a5c4d8edb30b56adad9bb3a2a0535338e480724a213e0acfd2d1c73c  $U2NET_HOME/u2net_human_seg.onnx" \
         | sha256sum -c -
 
 # Official Linux x86-64 Blender (amd64 image only; arm64 bakes host-native).

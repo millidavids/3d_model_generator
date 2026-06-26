@@ -67,10 +67,12 @@ The result is `data/out/scene_textured.glb` — with `--clean`, the only file th
 | `batch <in_dir> <out_dir>` | Reconstruct every photo subfolder; resumable, fault-tolerant, writes `manifest.txt`. |
 
 Options: `--quality {draft,balanced,high}` (detail vs speed, default `balanced`),
-`--mask` (remove background), `--max-edge N` (downscale cap; overrides the quality
-preset's default), `--no-downscale`, `--drop-blurry` (exclude soft frames — see
-**Input quality** below), `--clean` (after a successful run, delete all
-intermediates and leave only `scene_textured.glb`). See `--help` on any command.
+`--mask` (remove background), `--mask-model {u2net,u2net-human-seg}` (segmentation
+model; `u2net-human-seg` gives cleaner silhouettes for **people** on busy
+backgrounds), `--max-edge N` (downscale cap; overrides the quality preset's
+default), `--no-downscale`, `--drop-blurry` (exclude soft frames — see **Input
+quality** below), `--clean` (after a successful run, delete all intermediates and
+leave only `scene_textured.glb`). See `--help` on any command.
 
 ### Input quality
 

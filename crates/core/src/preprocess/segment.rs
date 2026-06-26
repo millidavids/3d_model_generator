@@ -6,17 +6,23 @@
 //! OpenMVS use different mask-file conventions, and OpenMVS works on COLMAP's
 //! *undistorted* images (so original-image masks wouldn't align). A solid black
 //! background carries no SIFT features and no stereo texture, so both tools
-//! ignore it naturally. Uses rembg's default u2net model (open license — we
-//! deliberately avoid the non-commercial `bria-rmbg` model).
+//! ignore it naturally. Uses an open-licensed rembg model (default `u2net`; we
+//! deliberately avoid the non-commercial `bria-rmbg` model). `model` selects the
+//! segmentation network — `u2net_human_seg` gives cleaner silhouettes for people.
+//!
+//! (We pass `--only-mask` and composite onto black ourselves; rembg's alpha
+//! matting only refines the *cutout's* alpha channel, so it has no effect on the
+//! `--only-mask` output — hence no alpha-matting option here.)
 
 use crate::error::Result;
 use crate::external;
 use std::path::Path;
 
 /// Remove the background from every image in `src_dir` (compositing the object
-/// onto black) and write the results into `dst_dir`. Foreground masks are
-/// generated in `mask_dir` (scratch). Returns the number of images written.
-pub fn mask_images(src_dir: &Path, dst_dir: &Path, mask_dir: &Path) -> Result<usize> {
+/// onto black) and write the results into `dst_dir`. `model` is the rembg model
+/// name. Foreground masks are generated in `mask_dir` (scratch). Returns the
+/// number of images written.
+pub fn mask_images(src_dir: &Path, dst_dir: &Path, mask_dir: &Path, model: &str) -> Result<usize> {
     std::fs::create_dir_all(dst_dir)?;
     std::fs::create_dir_all(mask_dir)?;
 
@@ -27,6 +33,8 @@ pub fn mask_images(src_dir: &Path, dst_dir: &Path, mask_dir: &Path) -> Result<us
         &[
             "p",
             "--only-mask",
+            "-m",
+            model,
             external::path_str(src_dir)?,
             external::path_str(mask_dir)?,
         ],

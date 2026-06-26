@@ -24,7 +24,12 @@ pub struct ReconstructConfig {
     pub quality: Quality,
     /// Exclude soft/blurry input frames (within guards) instead of only warning.
     pub drop_blurry: bool,
+    /// rembg model name for `--mask` (e.g. `u2net`, `u2net_human_seg`).
+    pub mask_model: String,
 }
+
+/// Default rembg segmentation model (open license, general-purpose).
+pub const DEFAULT_MASK_MODEL: &str = "u2net";
 
 impl Default for ReconstructConfig {
     fn default() -> Self {
@@ -36,6 +41,7 @@ impl Default for ReconstructConfig {
             clean: false,
             quality,
             drop_blurry: false,
+            mask_model: DEFAULT_MASK_MODEL.to_string(),
         }
     }
 }
@@ -60,8 +66,8 @@ pub fn reconstruct(photos: &Path, work: &Path, cfg: &ReconstructConfig) -> Resul
 
     let input = if cfg.mask {
         let out = work.join("masked");
-        let n = preprocess::mask_images(&qc_input, &out, &work.join("masks"))?;
-        tracing::info!(count = n, "masked images (background removed)");
+        let n = preprocess::mask_images(&qc_input, &out, &work.join("masks"), &cfg.mask_model)?;
+        tracing::info!(count = n, model = %cfg.mask_model, "masked images (background removed)");
         out
     } else {
         qc_input

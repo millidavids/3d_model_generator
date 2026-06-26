@@ -183,6 +183,19 @@ leg-separation metric)? Alpha-matting measured separately.
 **Success**: a cleaner mask option for people; the default path is unchanged; nothing baked that wasn't
 measured.
 
+**RESULT (implemented; measured on `gc`)** — shipped `--mask-model {u2net, u2net-human-seg}` (default
+`u2net`, unchanged). `u2net_human_seg` baked into the image (pinned sha256
+`01eb6a29…c73c`), verified to mask **offline** (0 downloads). CLI `MaskModelArg` maps kebab→underscore
+with a unit test (`u2net-human-seg`→`u2net_human_seg`).
+- **Measured u2net vs human_seg on `gc`**: masks agree **IoU 0.96**; human_seg keeps marginally *more*
+  foreground (incl. ~+0.8pp in the feet band — ambiguous, could even add contact-ground). So like robust
+  SfM, on `gc`'s clean wall-background the alternative doesn't demonstrably beat `u2net`; its benefit is
+  for people on **busy** backgrounds, which `gc` isn't. Shipped as an opt-in for that case.
+- **`isnet-general-use`**: still excluded (no non-person fixture, S4).
+- **`--alpha-matting`: DROPPED** (not just deferred). With our `--only-mask` + hard-threshold composite,
+  `-a` is a **no-op** (measured IoU **1.0000**, 0 px changed) — it only refines the *cutout's* alpha,
+  which `--only-mask` never emits. Shipping it would be a misleading dead flag.
+
 ---
 
 ## Phase 4 — `doctor` smoke test + capture guidance

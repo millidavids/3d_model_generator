@@ -52,6 +52,24 @@ fn resolve_max_edge(quality: Quality, max_edge: Option<u32>) -> u32 {
     max_edge.unwrap_or(quality.max_edge())
 }
 
+/// rembg background-segmentation model for `--mask` (open-licensed only).
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum MaskModelArg {
+    /// General-purpose (default).
+    U2net,
+    /// Tuned for people — cleaner silhouettes around limbs.
+    U2netHumanSeg,
+}
+
+impl MaskModelArg {
+    fn rembg_name(self) -> &'static str {
+        match self {
+            MaskModelArg::U2net => "u2net",
+            MaskModelArg::U2netHumanSeg => "u2net_human_seg",
+        }
+    }
+}
+
 #[derive(Subcommand)]
 enum Commands {
     /// Check that all external tools are available and working.
@@ -68,6 +86,9 @@ enum Commands {
         /// Remove the background (rembg) before reconstruction, for object-only meshes.
         #[arg(long)]
         mask: bool,
+        /// Background-removal model for --mask (people: u2net-human-seg).
+        #[arg(long, value_enum, default_value_t = MaskModelArg::U2net)]
+        mask_model: MaskModelArg,
         /// Detail-vs-speed preset (sets dense resolution + refinement).
         #[arg(long, value_enum, default_value_t = QualityArg::Balanced)]
         quality: QualityArg,
@@ -91,6 +112,9 @@ enum Commands {
         /// Remove the background (rembg) before reconstruction.
         #[arg(long)]
         mask: bool,
+        /// Background-removal model for --mask (people: u2net-human-seg).
+        #[arg(long, value_enum, default_value_t = MaskModelArg::U2net)]
+        mask_model: MaskModelArg,
         /// Use the input images as-is (skip downscaling).
         #[arg(long)]
         no_downscale: bool,
@@ -123,6 +147,7 @@ fn main() -> Result<()> {
             work,
             no_downscale,
             mask,
+            mask_model,
             quality,
             max_edge,
             drop_blurry,
@@ -136,6 +161,7 @@ fn main() -> Result<()> {
                 clean,
                 quality,
                 drop_blurry,
+                mask_model: mask_model.rembg_name().to_string(),
             };
             let mesh = pipeline::reconstruct(&images, &work, &cfg)?;
             println!("textured mesh: {}", mesh.display());
@@ -146,6 +172,7 @@ fn main() -> Result<()> {
             input_dir,
             output_dir,
             mask,
+            mask_model,
             no_downscale,
             quality,
             max_edge,
@@ -162,6 +189,7 @@ fn main() -> Result<()> {
                     clean,
                     quality,
                     drop_blurry,
+                    mask_model: mask_model.rembg_name().to_string(),
                 },
                 force,
             };
@@ -178,4 +206,24 @@ fn init_tracing() {
         .without_time()
         .with_target(false)
         .init();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mask_model_maps_to_the_exact_rembg_model_name() {
+        // The CLI value is kebab-case (u2net-human-seg) but rembg wants underscores;
+        // a wrong name silently fails masking, so pin the mapping.
+        assert_eq!(MaskModelArg::U2net.rembg_name(), "u2net");
+        assert_eq!(MaskModelArg::U2netHumanSeg.rembg_name(), "u2net_human_seg");
+    }
+
+    #[test]
+    fn quality_arg_maps_to_core_quality() {
+        assert_eq!(Quality::from(QualityArg::Draft), Quality::Draft);
+        assert_eq!(Quality::from(QualityArg::Balanced), Quality::Balanced);
+        assert_eq!(Quality::from(QualityArg::High), Quality::High);
+    }
 }
