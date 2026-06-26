@@ -244,6 +244,18 @@ punts for these reasons.
 heuristic (longest principal axis = up) behind an opt-in flag, (c) leave-as-is. Decide go/no-go after
 the spike. Default to **skip** unless the spike finds a low-risk win.
 
+**RESULT (spike done) — NO-GO. Not implemented.**
+- **(a) EXIF gravity: dead end.** The Pixel photos carry no accelerometer/gravity data and no parsed
+  MakerNote; only the 2-D `Orientation` tag (=1). No 3-D up-vector available.
+- **(b) Geometry PCA: only partial, and unsafe as a default.** On the `gc` standing person, PC1 recovers
+  the up *axis* cleanly (variance 1.55 vs 0.12 — 13× dominant, aligned to Y). BUT: up-vs-**down** is
+  unresolvable (the two ends have near-identical perpendicular spread, 0.335 vs 0.352 — can't tell head
+  from feet), azimuth is undetermined, and for *non-elongated* subjects (a ball, a bust, a box) PCA gives
+  no meaningful up at all — "longest axis = vertical" would tip a wide object (car, table) onto its side.
+- **Verdict**: works only for elongated subjects, only the axis (not direction/azimuth), and would
+  actively mis-orient everything else — the same reasons `lo_fi/normalize.py` leaves orientation as-is.
+  Leave orientation to the user in Blender. **Skipped.**
+
 ---
 
 ## Cross-cutting concerns
