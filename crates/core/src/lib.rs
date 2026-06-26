@@ -16,6 +16,7 @@ pub mod pipeline;
 pub mod preprocess;
 pub mod quality;
 pub mod reconstruct;
+pub mod smoke;
 pub mod validate;
 
 pub use error::{Error, Result};

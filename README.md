@@ -126,6 +126,14 @@ mesh, e.g. from Apple Object Capture on the Mac).
   pipeline.
 - Even, diffuse lighting; avoid harsh shadows and reflections.
 - Object on a surface → use `--mask`, or the flat surface dominates the result.
+- **Method:** walk a full circle around the subject (plus higher/lower passes for
+  top and underside). A turntable works for small objects *only* if the
+  background is plain — a moving background relative to the object confuses SfM.
+- **Hold still / sharp focus.** Motion blur poisons feature matching; the tool
+  scores sharpness and warns on soft frames (`--drop-blurry` to exclude them).
+- **People:** add `--mask-model u2net-human-seg` for a cleaner silhouette. Pose
+  with limbs *apart* — arms off the torso, feet shoulder-width — so narrow, dark
+  concavities (between the legs, under the arms) don't get bridged into webbing.
 - Shoot **JPEG/PNG** (HEIC isn't decoded yet).
 
 ## Limitations

@@ -3,9 +3,11 @@
 use anyhow::Result;
 use modelgen_core::external;
 
-/// Report which external tools are present. Exits non-zero if any *required*
-/// tool is missing, so `modelgen doctor` can gate scripts/CI.
-pub fn doctor() -> Result<()> {
+/// Report which external tools are present. With `full`, also run a smoke test
+/// (rembg + COLMAP on a tiny input) to catch tools that resolve but crash at work.
+/// Exits non-zero if any *required* tool is missing or the smoke test fails, so
+/// `modelgen doctor` can gate scripts/CI.
+pub fn doctor(full: bool) -> Result<()> {
     println!("Checking external tools:");
     let mut missing_required = 0u32;
     for status in external::check_tools() {
@@ -24,14 +26,25 @@ pub fn doctor() -> Result<()> {
         }
     }
     println!();
-    if missing_required == 0 {
-        println!("All required tools found.");
-        Ok(())
-    } else {
+    if missing_required > 0 {
         println!(
             "{missing_required} required tool(s) missing — run inside the container, or see the setup docs."
         );
         // Non-zero exit so `modelgen doctor && ...` gates correctly.
         std::process::exit(1);
     }
+    println!("All required tools found.");
+
+    if full {
+        print!("Smoke test (rembg + COLMAP on a tiny input)... ");
+        std::io::Write::flush(&mut std::io::stdout()).ok();
+        match modelgen_core::smoke::smoke_test() {
+            Ok(()) => println!("OK"),
+            Err(e) => {
+                println!("FAILED: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+    Ok(())
 }

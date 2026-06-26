@@ -216,6 +216,19 @@ smoke still takes seconds → keep it opt-in.
 **Tests**: `doctor --full` exits 0 on a healthy toolchain (fixture registers + meshes), non-zero when a
 tool is broken/missing.
 
+**RESULT (implemented; verified)** — shipped.
+- **Descoped the fixture (vs the plan): execution smoke, not a full reconstruct.** A registering
+  micro-capture fixture is fragile (S7) and we have none; instead `crates/core/src/smoke.rs` runs the two
+  *crash-prone* tools on tiny synthetic noise — rembg (exercises the onnxruntime model — the cited
+  arm64-illegal-instruction case) and COLMAP `feature_extractor` (exercises SIFT). It tests *execution*,
+  not registration, so no real fixture is needed and S7's concern evaporates. OpenMVS needs a real scene
+  to run, so it stays at the `--version`/presence check.
+- `doctor --full` (opt-in flag; default `doctor` stays fast) runs the smoke and exits non-zero on failure.
+  **Verified**: healthy toolchain → rembg masks 2 images, COLMAP extracts features, prints `OK`, exit 0.
+- 4b capture guidance: README gaps filled (turntable caveat, motion-blur/`--drop-blurry`, and a
+  people/limbs-apart note — the earned lesson from the leg-webbing fix). Dropped the scale-reference idea
+  (the pipeline has no metric scale to consume).
+
 **Success**: a broken toolchain fails in `doctor`, not 40 minutes into a `batch`.
 
 ---

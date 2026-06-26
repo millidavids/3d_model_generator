@@ -73,7 +73,12 @@ impl MaskModelArg {
 #[derive(Subcommand)]
 enum Commands {
     /// Check that all external tools are available and working.
-    Doctor,
+    Doctor {
+        /// Also run a smoke test (rembg + COLMAP on a tiny input) to catch tools
+        /// that resolve but crash at work.
+        #[arg(long)]
+        full: bool,
+    },
     /// Reconstruct a textured mesh from photos (COLMAP SfM + OpenMVS dense/mesh/texture).
     Reconstruct {
         /// Directory of input photographs.
@@ -140,7 +145,7 @@ fn main() -> Result<()> {
     init_tracing();
 
     match Cli::parse().command {
-        Commands::Doctor => commands::doctor(),
+        Commands::Doctor { full } => commands::doctor(full),
 
         Commands::Reconstruct {
             images,
