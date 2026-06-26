@@ -220,10 +220,12 @@ it matches best; the match position gives the depth. Fuse all the per-view depth
 get a **dense point cloud**: millions of points, essentially one per pixel, blanketing the real
 surface.
 
-We tune it for CPU: `--resolution-level 2` (work at quarter-resolution — halve each dimension
-twice — which is dramatically faster and plenty for a lo-fi target) and `--max-resolution 1600`
-(an absolute pixel ceiling). This is the slowest, most memory-hungry stage; the knobs trade
-detail we don't need for speed we do.
+We tune it for CPU via the `--quality` preset, whose main lever is
+`--resolution-level`: at `balanced` it works at quarter-resolution (halve each dimension twice
+— dramatically faster), at `high` at half-resolution (each dimension halved once = **~4× the
+working pixels** of `balanced`, and far more dense points), with a `--max-resolution` ceiling
+that tracks the resolved input downscale. This is the slowest, most memory-hungry stage, so
+the preset is where you trade detail for speed.
 
 ### 4.3 ReconstructMesh — points into a surface
 
@@ -233,9 +235,12 @@ of triangles approximating the real surface the points sampled. OpenMVS does thi
 the points and extracting the surface that best separates "inside" from "outside." Output:
 `scene_mesh.ply` — geometry only, still un-coloured (grey clay).
 
-> **We skip `RefineMesh`.** OpenMVS has an optional `RefineMesh` step that sharpens the mesh
-> against the images — and it's the **CUDA-heavy** part. Skipping it is the central CPU-only
-> compromise: we accept a slightly softer mesh in exchange for running with no GPU at all.
+> **`RefineMesh` runs only at `--quality high`.** OpenMVS has an optional `RefineMesh` step that
+> **deforms the surface to match the photos** (photoconsistency) — sharper cloth folds and edges.
+> It's GPU-accelerated upstream but runs fine on CPU here, just slowly, so `balanced`/`draft` skip
+> it and `high` pays for it. Counter-intuitively it *reduces* triangle count (it remeshes to an
+> image-appropriate, uniform resolution) while *increasing* perceived detail — quality is about
+> putting the surface where the images say it is, not raw polygon count.
 
 ### 4.4 TextureMesh — paint the photos back on
 

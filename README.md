@@ -26,7 +26,7 @@ downstream concern (see **Downstream** below).
    Motion: camera poses + a sparse cloud, then undistortion. **CPU**, single-camera.
 3. **OpenMVS** ([github.com/cdcseacave/openMVS](https://github.com/cdcseacave/openMVS))
    — dense point cloud → surface mesh → texture. **CPU** (`RefineMesh`, the
-   CUDA-heavy step, is skipped). With `--mask`, the dense step is also handed a
+   photoconsistency pass, runs only at `--quality high`). With `--mask`, the dense step is also handed a
    per-image *ignore-mask* so it skips the background instead of webbing a thin
    membrane across narrow concavities (e.g. between a standing person's legs).
 4. **Output** — `scene_textured.glb`: a self-contained glTF (geometry + UVs +
@@ -66,9 +66,44 @@ The result is `data/out/scene_textured.glb` — with `--clean`, the only file th
 | `reconstruct <photos> <work>` | Photos → `scene_textured.glb` in `<work>`. |
 | `batch <in_dir> <out_dir>` | Reconstruct every photo subfolder; resumable, fault-tolerant, writes `manifest.txt`. |
 
-Options: `--mask` (remove background), `--max-edge N` (downscale, default 1600),
-`--no-downscale`, `--clean` (after a successful run, delete all intermediates and
-leave only `scene_textured.glb`). See `--help` on any command.
+Options: `--quality {draft,balanced,high}` (detail vs speed, default `balanced`),
+`--mask` (remove background), `--max-edge N` (downscale cap; overrides the quality
+preset's default), `--no-downscale`, `--drop-blurry` (exclude soft frames — see
+**Input quality** below), `--clean` (after a successful run, delete all
+intermediates and leave only `scene_textured.glb`). See `--help` on any command.
+
+### Input quality
+
+Garbage in, garbage out: a few blurry frames or a half-registered solve quietly
+wreck the mesh, and nothing downstream recovers it. Two automatic checks:
+
+- **Sharpness QC** — each input is scored (variance-of-Laplacian); frames far below
+  the set's median are **warned** about by default. Add `--drop-blurry` to exclude
+  them, within guards (never drops below ~80% of inputs, never more than 15% at
+  once) so QC can't itself open a coverage gap.
+- **Registration report** — after Structure-from-Motion, the run logs how many
+  images actually registered (`registered N / total M`) and warns if too few did —
+  a sign of poor overlap, blur, or low texture. Surfaced *before* the slow dense
+  step.
+
+### Quality presets
+
+`--quality` is one dial that sets the input downscale, the dense step's working
+resolution, and whether the `RefineMesh` photoconsistency pass runs:
+
+| Preset | Input | Dense | Refine | Use |
+|---|---|---|---|---|
+| `draft` | 1000px | ⅛-res | no | quick previews / capture iteration |
+| `balanced` (default) | 1600px | ¼-res | no | the historical behavior |
+| `high` | 2400px | ½-res | **yes** | sharper geometry; slower |
+
+`high` feeds the dense step ~2× the linear resolution of `balanced` and then runs
+`RefineMesh`, which deforms the surface to match the photos — noticeably crisper
+cloth folds and edges, even though the refined mesh ends up lower-poly. (The
+texture atlas OpenMVS generates scales with that detail, so `high` typically
+yields a larger, sharper texture too.) `--max-edge N` overrides the preset's input
+size if you want a different resolution. (COLMAP's SIFT image size is capped
+internally so high-resolution inputs don't exhaust a memory-limited container.)
 
 ## Downstream: making it lo-fi
 

@@ -7,7 +7,8 @@
 mod commands;
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
+use modelgen_core::Quality;
 use modelgen_core::pipeline::{self, ReconstructConfig};
 use std::path::PathBuf;
 
@@ -20,6 +21,35 @@ use std::path::PathBuf;
 struct Cli {
     #[command(subcommand)]
     command: Commands,
+}
+
+/// Detail-vs-speed preset (CLI mirror of [`modelgen_core::Quality`], so the core
+/// stays free of the `clap` dependency). Keep the doc text in step with `Quality`.
+#[derive(Clone, Copy, Debug, ValueEnum)]
+enum QualityArg {
+    /// Fast and coarse — quick previews and capture iteration.
+    Draft,
+    /// Default: 1600px inputs, quarter-res dense, no refinement.
+    Balanced,
+    /// 2400px inputs, half-res dense, plus the RefineMesh pass. Much slower.
+    High,
+}
+
+impl From<QualityArg> for Quality {
+    fn from(q: QualityArg) -> Self {
+        match q {
+            QualityArg::Draft => Quality::Draft,
+            QualityArg::Balanced => Quality::Balanced,
+            QualityArg::High => Quality::High,
+        }
+    }
+}
+
+/// Resolve the input downscale cap: an explicit `--max-edge` overrides the preset
+/// default. Shared by the `reconstruct` and `batch` subcommands so the precedence
+/// rule lives in one place.
+fn resolve_max_edge(quality: Quality, max_edge: Option<u32>) -> u32 {
+    max_edge.unwrap_or(quality.max_edge())
 }
 
 #[derive(Subcommand)]
@@ -38,9 +68,15 @@ enum Commands {
         /// Remove the background (rembg) before reconstruction, for object-only meshes.
         #[arg(long)]
         mask: bool,
-        /// Longest-edge (px) to downscale inputs to before reconstruction.
-        #[arg(long, default_value_t = 1600)]
-        max_edge: u32,
+        /// Detail-vs-speed preset (sets dense resolution + refinement).
+        #[arg(long, value_enum, default_value_t = QualityArg::Balanced)]
+        quality: QualityArg,
+        /// Longest-edge (px) to downscale inputs to (overrides the --quality default).
+        #[arg(long)]
+        max_edge: Option<u32>,
+        /// Drop soft/blurry input frames (within guards) instead of only warning.
+        #[arg(long)]
+        drop_blurry: bool,
         /// Delete all intermediates after a successful run, keeping only the .glb.
         #[arg(long)]
         clean: bool,
@@ -55,9 +91,18 @@ enum Commands {
         /// Remove the background (rembg) before reconstruction.
         #[arg(long)]
         mask: bool,
-        /// Longest-edge (px) to downscale inputs to.
-        #[arg(long, default_value_t = 1600)]
-        max_edge: u32,
+        /// Use the input images as-is (skip downscaling).
+        #[arg(long)]
+        no_downscale: bool,
+        /// Detail-vs-speed preset (sets dense resolution + refinement).
+        #[arg(long, value_enum, default_value_t = QualityArg::Balanced)]
+        quality: QualityArg,
+        /// Longest-edge (px) to downscale inputs to (overrides the --quality default).
+        #[arg(long)]
+        max_edge: Option<u32>,
+        /// Drop soft/blurry input frames (within guards) instead of only warning.
+        #[arg(long)]
+        drop_blurry: bool,
         /// Delete each object's intermediates, keeping only its .glb.
         #[arg(long)]
         clean: bool,
@@ -78,14 +123,19 @@ fn main() -> Result<()> {
             work,
             no_downscale,
             mask,
+            quality,
             max_edge,
+            drop_blurry,
             clean,
         } => {
+            let quality: Quality = quality.into();
             let cfg = ReconstructConfig {
                 downscale: !no_downscale,
                 mask,
-                max_edge,
+                max_edge: resolve_max_edge(quality, max_edge),
                 clean,
+                quality,
+                drop_blurry,
             };
             let mesh = pipeline::reconstruct(&images, &work, &cfg)?;
             println!("textured mesh: {}", mesh.display());
@@ -96,16 +146,22 @@ fn main() -> Result<()> {
             input_dir,
             output_dir,
             mask,
+            no_downscale,
+            quality,
             max_edge,
+            drop_blurry,
             clean,
             force,
         } => {
+            let quality: Quality = quality.into();
             let opts = commands::BatchOpts {
                 recon: ReconstructConfig {
-                    downscale: true,
+                    downscale: !no_downscale,
                     mask,
-                    max_edge,
+                    max_edge: resolve_max_edge(quality, max_edge),
                     clean,
+                    quality,
+                    drop_blurry,
                 },
                 force,
             };

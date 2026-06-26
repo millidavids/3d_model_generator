@@ -2,6 +2,7 @@
 
 use crate::error::Result;
 use crate::preprocess;
+use crate::quality::Quality;
 use std::path::{Path, PathBuf};
 
 /// Front-half settings: input downscaling + optional background masking.
@@ -11,20 +12,30 @@ pub struct ReconstructConfig {
     pub downscale: bool,
     /// Remove the background (rembg) so the reconstructed mesh is object-only.
     pub mask: bool,
-    /// Longest-edge pixel cap when downscaling.
+    /// Resolved longest-edge pixel cap for the inputs (defaults to `quality`'s
+    /// value unless the caller overrides it). Single source of truth: it drives
+    /// both the input downscale and the dense step's `--max-resolution` ceiling, so
+    /// the two can't drift.
     pub max_edge: u32,
     /// After a successful run, delete every intermediate in the work dir and
     /// keep only the final `.glb`.
     pub clean: bool,
+    /// Detail-vs-speed preset for the dense + refinement stages.
+    pub quality: Quality,
+    /// Exclude soft/blurry input frames (within guards) instead of only warning.
+    pub drop_blurry: bool,
 }
 
 impl Default for ReconstructConfig {
     fn default() -> Self {
+        let quality = Quality::default();
         Self {
             downscale: true,
             mask: false,
-            max_edge: 1600,
+            max_edge: quality.max_edge(),
             clean: false,
+            quality,
+            drop_blurry: false,
         }
     }
 }
@@ -43,16 +54,23 @@ pub fn reconstruct(photos: &Path, work: &Path, cfg: &ReconstructConfig) -> Resul
         photos.to_path_buf()
     };
 
+    // Input QC: warn on (and optionally drop) blurry frames before masking/SfM, so
+    // the dropped set propagates to every later stage.
+    let qc_input = preprocess::sharpness_qc(&downscaled, cfg.drop_blurry, work)?;
+
     let input = if cfg.mask {
         let out = work.join("masked");
-        let n = preprocess::mask_images(&downscaled, &out, &work.join("masks"))?;
+        let n = preprocess::mask_images(&qc_input, &out, &work.join("masks"))?;
         tracing::info!(count = n, "masked images (background removed)");
         out
     } else {
-        downscaled
+        qc_input
     };
 
-    let mesh = crate::reconstruct::run(&input, work, cfg.mask)?.textured_mesh;
+    // The dense step's resolution ceiling tracks the resolved input cap (`max_edge`),
+    // not the preset, so a `--max-edge` override is honored end-to-end.
+    let mesh =
+        crate::reconstruct::run(&input, work, cfg.mask, cfg.quality, cfg.max_edge)?.textured_mesh;
 
     if cfg.clean {
         clean_intermediates(work, &mesh)?;

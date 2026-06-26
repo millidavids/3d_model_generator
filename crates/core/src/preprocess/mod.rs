@@ -6,6 +6,8 @@
 
 mod downscale;
 mod segment;
+mod sharpness;
 
 pub use downscale::downscale_images;
 pub use segment::mask_images;
+pub(crate) use sharpness::run as sharpness_qc;

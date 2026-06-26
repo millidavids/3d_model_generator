@@ -13,13 +13,17 @@ use std::process::Command;
 /// Single-binary tools that must be present for reconstruction (the core pipeline).
 pub const REQUIRED_TOOLS: &[&str] = &["colmap", "rembg"];
 
-/// OpenMVS ships several binaries; the dense → mesh → texture steps we use.
+/// OpenMVS binaries every reconstruction uses (dense → mesh → texture).
 pub const OPENMVS_TOOLS: &[&str] = &[
     "InterfaceCOLMAP",
     "DensifyPointCloud",
     "ReconstructMesh",
     "TextureMesh",
 ];
+
+/// OpenMVS binaries used only by some runs — `doctor` reports them but does not
+/// hard-require them. `RefineMesh` runs only at the `High` quality preset.
+pub const OPENMVS_OPTIONAL_TOOLS: &[&str] = &["RefineMesh"];
 
 /// Presence (and, later, smoke-test) status of one external tool.
 #[derive(Debug)]
@@ -43,12 +47,16 @@ pub struct ToolStatus {
 /// yields no version. A fuller fixture-based smoke (a 1-image `rembg`, a tiny
 /// COLMAP/OpenMVS run) remains future work.
 pub fn check_tools() -> Vec<ToolStatus> {
-    REQUIRED_TOOLS
+    let required = REQUIRED_TOOLS
         .iter()
         .chain(OPENMVS_TOOLS.iter())
         .copied()
-        .map(|name| status_for(name, true))
-        .collect()
+        .map(|name| status_for(name, true));
+    let optional = OPENMVS_OPTIONAL_TOOLS
+        .iter()
+        .copied()
+        .map(|name| status_for(name, false));
+    required.chain(optional).collect()
 }
 
 fn status_for(name: &str, required: bool) -> ToolStatus {

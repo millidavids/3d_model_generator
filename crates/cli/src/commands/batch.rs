@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 /// Settings shared by every object in a batch.
 pub struct BatchOpts {
-    /// Reconstruction settings (downscale, mask, max edge).
+    /// Reconstruction settings (downscale, mask, quality, max edge, clean).
     pub recon: ReconstructConfig,
     /// Re-process objects even if their output already exists.
     pub force: bool,

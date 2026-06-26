@@ -14,8 +14,10 @@ pub mod error;
 pub mod external;
 pub mod pipeline;
 pub mod preprocess;
+pub mod quality;
 pub mod reconstruct;
 pub mod validate;
 
 pub use error::{Error, Result};
 pub use pipeline::{ReconstructConfig, reconstruct};
+pub use quality::Quality;
